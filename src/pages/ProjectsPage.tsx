@@ -13,10 +13,13 @@ const projectStatusFromValue = (value: string): ProjectStatus | 'all' => {
 
 export const ProjectsPage = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { projects, isLoading, deleteProject } = useData()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all')
+
+  const getClientName = (clientId: string) =>
+    users.find((person) => person.id === clientId)?.name ?? clientId
 
   if (!user) {
     return null
@@ -31,9 +34,15 @@ export const ProjectsPage = () => {
   const filteredProjects = visibleProjects
     .filter((project) => {
       const lowered = search.toLowerCase()
-      return project.name.toLowerCase().includes(lowered)
+      const haystack = `${project.name} ${getClientName(project.clientId)} ${project.notes}`.toLowerCase()
+      return haystack.includes(lowered)
     })
     .filter((project) => (statusFilter === 'all' ? true : project.status === statusFilter))
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+  }
 
   return (
     <div className="page-stack">
@@ -51,7 +60,7 @@ export const ProjectsPage = () => {
 
       <section className="card filter-bar">
         <input
-          placeholder="Search by project name"
+          placeholder="Search by project name, client, notes"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -68,6 +77,9 @@ export const ProjectsPage = () => {
             </option>
           ))}
         </select>
+        <button type="button" className="btn btn--ghost" onClick={clearFilters}>
+          Clear filters
+        </button>
       </section>
 
       {isLoading ? <p className="loading-placeholder">Loading projects...</p> : null}
@@ -88,7 +100,7 @@ export const ProjectsPage = () => {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Client ID</th>
+                  <th>Client</th>
                   <th>Status</th>
                   <th>Due</th>
                   <th>Updated</th>
@@ -101,7 +113,7 @@ export const ProjectsPage = () => {
                     <td>
                       <Link to={`/projects/${project.id}`}>{project.name}</Link>
                     </td>
-                    <td>{project.clientId}</td>
+                    <td>{getClientName(project.clientId)}</td>
                     <td>
                       <StatusBadge type="project" status={project.status} />
                     </td>

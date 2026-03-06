@@ -203,10 +203,11 @@ textarea {
 .filter-bar {
   display: grid;
   gap: 0.65rem;
+  grid-template-columns: 1fr minmax(180px, 220px) auto;
 }
 
-.filter-bar {
-  grid-template-columns: 1fr minmax(180px, 220px);
+.filter-bar .btn {
+  justify-self: end;
 }
 
 .filter-bar input,
@@ -539,12 +540,12 @@ tbody td {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
-    order: 2;
-  }
-
   .filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    order: 2;
   }
 }
 

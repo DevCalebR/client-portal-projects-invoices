@@ -12,10 +12,15 @@ const normalizeStatus = (value: string): InvoiceStatus | 'all' =>
 
 export const InvoicesPage = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { invoices, isLoading, projects, deleteInvoice } = useData()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all')
+
+  const clientNameById = useMemo(
+    () => new Map(users.map((person) => [person.id, person.name])),
+    [users],
+  )
 
   const visibleInvoices = useMemo(() => {
     const scope = isAdminUser(user)
@@ -26,8 +31,9 @@ export const InvoicesPage = () => {
       ...invoice,
       projectName:
         projects.find((project) => project.id === invoice.projectId)?.name ?? 'Unknown project',
+      clientName: clientNameById.get(invoice.clientId) ?? invoice.clientId,
     }))
-  }, [invoices, projects, user])
+  }, [invoices, projects, user, clientNameById])
 
   const filtered = useMemo(
     () =>
@@ -35,11 +41,17 @@ export const InvoicesPage = () => {
         .filter(
           (invoice) =>
             invoice.projectName.toLowerCase().includes(search.toLowerCase()) ||
+            invoice.clientName.toLowerCase().includes(search.toLowerCase()) ||
             invoice.id.toLowerCase().includes(search.toLowerCase()),
         )
         .filter((invoice) => (statusFilter === 'all' ? true : invoice.status === statusFilter)),
     [search, statusFilter, visibleInvoices],
   )
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('all')
+  }
 
   if (!user) {
     return null
@@ -61,7 +73,7 @@ export const InvoicesPage = () => {
 
       <section className="card filter-bar">
         <input
-          placeholder="Search by invoice id or project"
+          placeholder="Search by invoice id, project, or client"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -76,6 +88,9 @@ export const InvoicesPage = () => {
             </option>
           ))}
         </select>
+        <button className="btn btn--ghost" type="button" onClick={clearFilters}>
+          Clear filters
+        </button>
       </section>
 
       {isLoading ? <p className="loading-placeholder">Loading invoices...</p> : null}
@@ -99,6 +114,7 @@ export const InvoicesPage = () => {
                 <tr>
                   <th>Invoice</th>
                   <th>Project</th>
+                  <th>Client</th>
                   <th>Status</th>
                   <th>Due</th>
                   <th>Total</th>
@@ -112,6 +128,7 @@ export const InvoicesPage = () => {
                       <Link to={`/invoices/${invoice.id}`}>{invoice.id}</Link>
                     </td>
                     <td>{invoice.projectName}</td>
+                    <td>{invoice.clientName}</td>
                     <td>
                       <StatusBadge type="invoice" status={invoice.status} />
                     </td>

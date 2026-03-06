@@ -13,11 +13,9 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (loading) {
     return (
-      <main className="page-shell page-shell--loading">
-        <section className="card">
-          <p className="loading-placeholder">Loading account session...</p>
-        </section>
-      </main>
+      <section className="card">
+        <p className="loading-placeholder">Loading account session...</p>
+      </section>
     )
   }
 

@@ -24,7 +24,9 @@ export const SettingsPage = () => {
     <div className="page-stack">
       <section className="card">
         <h1>Settings</h1>
-        <p className="muted">Session is local-only. Data is stored in your browser storage.</p>
+        <p className="muted">
+          Session and entities are local-only and persist in this browser&apos;s localStorage.
+        </p>
 
         <div className="settings-grid">
           <div>
@@ -49,8 +51,8 @@ export const SettingsPage = () => {
       <section className="card">
         <h2>Storage behavior</h2>
         <p>
-          The app uses localStorage for persistence. Demo users and data are seeded on first load
-          and can be persisted between sessions.
+          Data is stored with stable localStorage keys and seeded demo content is only written if local keys
+          are missing. Use this for realistic portfolio demos without a backend.
         </p>
         <button className="btn btn--primary" onClick={handleReset}>
           Restore seeded demo data

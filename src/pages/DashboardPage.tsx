@@ -22,7 +22,7 @@ const DashboardCard = ({
 )
 
 export const DashboardPage = () => {
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { projects, invoices, isLoading } = useData()
 
   if (!user) {
@@ -41,6 +41,8 @@ export const DashboardPage = () => {
   const unpaidCount = visibleInvoices.filter((invoice) => invoice.status === 'unpaid').length
   const paidCount = visibleInvoices.filter((invoice) => invoice.status === 'paid').length
   const overdueCount = visibleInvoices.filter((invoice) => invoice.status === 'overdue').length
+  const getClientName = (clientId: string) =>
+    users.find((person) => person.id === clientId)?.name ?? 'Unassigned client'
 
   if (isLoading) {
     return <p className="loading-placeholder">Loading dashboard data...</p>
@@ -102,7 +104,7 @@ export const DashboardPage = () => {
                   <div>
                     <strong>{project.name}</strong>
                     <small>
-                      Due {formatDate(project.dueDate)}
+                      Client: {getClientName(project.clientId)} • Due {formatDate(project.dueDate)}
                     </small>
                   </div>
                   <StatusBadge type="project" status={project.status} />
@@ -128,7 +130,7 @@ export const DashboardPage = () => {
                   <div>
                     <strong>{invoice.id}</strong>
                     <small>
-                      Total {formatCurrency(invoice.total)} • Issued {formatDate(invoice.issueDate)}
+                      Client: {getClientName(invoice.clientId)} • Total {formatCurrency(invoice.total)}
                     </small>
                   </div>
                   <StatusBadge type="invoice" status={invoice.status} />

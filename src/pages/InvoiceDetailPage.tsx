@@ -7,7 +7,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
 
 export const InvoiceDetailPage = () => {
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { getInvoice, getProject, isLoading } = useData()
@@ -34,6 +34,7 @@ export const InvoiceDetailPage = () => {
 
   const project = getProject(invoice.projectId)
   const projectName = project?.name ?? 'Project unavailable'
+  const clientName = users.find((person) => person.id === invoice.clientId)?.name ?? invoice.clientId
 
   const totals = invoice.lineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0)
 
@@ -65,7 +66,8 @@ export const InvoiceDetailPage = () => {
           </div>
           <div>
             <p className="muted">Client</p>
-            <p>{invoice.clientId}</p>
+            <p>{clientName}</p>
+            <small className="muted">{invoice.clientId}</small>
           </div>
         </div>
 

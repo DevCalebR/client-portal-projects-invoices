@@ -1,33 +1,24 @@
 # Client Portal — Projects & Invoices
 
-A polished, portfolio-ready freelance-style dashboard built with **Vite + React + TypeScript**.
+A portfolio-ready React + TypeScript SaaS-style demo that showcases:
 
-It demonstrates a realistic local client-portal workflow:
+- local authentication flow with session persistence
+- role-based route protection and role-specific navigation
+- project and invoice CRUD-style workflows
+- validated forms with line-item calculations
+- dashboard + searchable/filterable list views
+- resilient loading, empty, and error states
 
-- Email + password authentication with persisted local sessions.
-- Role-based access (admin vs client).
-- Protected routes and role-aware navigation.
-- Project and invoice entities with CRUD-style flows.
-- Validation-heavy forms and dynamic invoice line-item totals.
-- Search/filterable dashboards and list views.
-- Responsive dashboard UI and loading/error/empty states.
+## What the app does
 
-## What it does
+This app simulates a freelance client portal:
 
-This app lets an admin manage projects and invoices while clients can only view assets assigned to them.
+- **admin** users can manage all projects/invoices and create/edit/delete records
+- **client** users can view only their own assigned projects and invoices
 
-### Roles
+The entire experience is local-first and intentionally production-style in structure while staying easy to run and understand.
 
-- **admin**
-  - Create, edit, delete projects
-  - Create, edit, delete invoices
-  - Full dashboard with all records
-- **client**
-  - View only assigned projects and invoices
-  - Read-only detail pages
-  - Client-scoped dashboard summaries
-
-## Stack
+## Tech stack
 
 - Vite
 - React
@@ -35,72 +26,64 @@ This app lets an admin manage projects and invoices while clients can only view 
 - React Router
 - React Hook Form
 - Zod
-- LocalStorage for persistence
-
-## Feature list
-
-- `login` with demo credentials and local session persistence.
-- Protected route wrapper with role guard behavior.
-- Dashboard cards for key portfolio metrics.
-- Project list/detail and create/edit forms.
-- Invoice list/detail with editable line items and calculated totals.
-- Reusable status badges and reusable layout components.
-- Search and status filtering for Projects and Invoices.
-- Seeded data + reset-to-seed action for quick demos.
+- localStorage-based persistence
 
 ## Demo accounts
 
-Use one of these accounts to review different role flows:
+Use one of these accounts from the login page:
 
-- **admin**
-  - Email: `admin@example.com`
-  - Password: `admin123`
-- **client**
-  - Email: `client@example.com`
-  - Password: `client123`
+- Admin: `admin@example.com` / `admin123`
+- Client: `client@example.com` / `client123`
+- Additional seeded client: `noah@lakeside.co` / `client456`
 
-(Additional seeded client: `noah@lakeside.co` / `client456`)
+### Role behavior at a glance
 
-## Setup
+- Admin dashboard shows global cards and unfiltered lists.
+- Client dashboard filters to the signed-in client only.
+- Admin can create/edit/delete projects and invoices.
+- Client can open/view details and read-only lists for their scope.
+
+## Getting started
 
 ```bash
 npm install
-```
-
-## Development
-
-```bash
 npm run dev
 ```
 
-Open <http://localhost:5173> and authenticate with a demo account.
+Open `http://localhost:5173/login` and sign in with a seeded account.
 
-## Build and checks
+## Useful routes
 
-```bash
-npm run lint
-npm run build
-npm run build   # includes TypeScript type-check via Vite config
-```
+- `/login`
+- `/dashboard`
+- `/projects`
+- `/projects/:id`
+- `/projects/new`
+- `/projects/:id/edit`
+- `/invoices`
+- `/invoices/:id`
+- `/invoices/new`
+- `/invoices/:id/edit`
+- `/settings`
 
 ## Project structure
 
 ```text
 src/
-  ├─ App.tsx                   App shell + route wiring
-  ├─ main.tsx                  Bootstrap providers + router
-  ├─ index.css                 Shared visual system
-  ├─ components/
-  │  ├─ AppLayout.tsx          Protected dashboard shell and navigation
-  │  ├─ EmptyState.tsx         Empty collection component
-  │  ├─ ProtectedRoute.tsx     Auth + role guard
-  │  └─ StatusBadge.tsx        Reusable status styling
+  ├─ App.tsx
+  ├─ main.tsx
+  ├─ index.css
   ├─ context/
-  │  ├─ AuthContext.tsx        Mock auth + session persistence
-  │  └─ DataContext.tsx        In-memory/localStorage projects + invoices CRUD
+  │  ├─ AuthContext.tsx        Mock auth + session handling
+  │  └─ DataContext.tsx        Local project/invoice data providers
+  ├─ components/
+  │  ├─ AppLayout.tsx          Protected shell + navigation
+  │  ├─ EmptyState.tsx         Reusable empty state component
+  │  ├─ ProtectedRoute.tsx     Role and auth guard
+  │  └─ StatusBadge.tsx        Consistent status chips
   ├─ data/
-  │  ├─ seed.ts                Seed/demo users, projects, invoices
-  │  └─ storage.ts             Storage keys + load/save helpers
+  │  ├─ seed.ts                Seed users/projects/invoices
+  │  └─ storage.ts             localStorage key helpers
   ├─ pages/
   │  ├─ DashboardPage.tsx
   │  ├─ LoginPage.tsx
@@ -113,33 +96,58 @@ src/
   │  ├─ InvoicesPage.tsx
   │  └─ SettingsPage.tsx
   ├─ types/
-  │  └─ entities.ts            Strongly typed domain models
+  │  └─ entities.ts
   └─ utils/
-     └─ format.ts              Currency/date/ID/helpers
+     └─ format.ts
 ```
 
-## Data and auth persistence model
+## Auth and persistence model
 
-### Persistence approach
+- Auth data is bootstrapped from `seed.ts` and stored in localStorage under stable keys.
+- Session is saved at `cpp:session:v1` with a timestamp.
+- Project and invoice collections are read/written through storage helpers in `src/data/storage.ts`.
+- Seed data is retained when local data keys are missing and can be restored from Settings.
 
-All data is intentionally local and easy to replace:
+This pattern keeps the project realistic and easy to swap to API calls later without changing UI contracts.
 
-- **Session:** localStorage key `cpp:session:v1`
-- **Users/projects/invoices:** localStorage keys with `cpp:*:v1`
+## Scripts
 
-If keys are missing, seeded data is written first-run and used as defaults.
+```bash
+npm install
+npm run lint
+npm run typecheck
+npm run build
+```
 
-### Why this is portfolio-friendly
+## Testing
 
-- Demonstrates full domain modeling and role-based UI behavior.
-- Shows realistic data operations and validation.
-- Mirrors how SaaS portals handle guarded routes and scoped visibility.
-- Keeps back-end concerns decoupled behind context/data services.
+There is no automated test suite included in this version. The repo is intentionally kept lightweight for portfolio review, and behavior validation is handled via:
 
-## Future upgrades
+- route/auth role validation during interactive use
+- lint + typecheck + build validation
 
-- Replace local providers with API clients (tRPC/REST/GraphQL).
-- Persist to a real database with server-side auth.
-- Add file attachments and invoice PDF export.
-- Add activity logs and notifications.
-- Replace manual password check with secure auth provider.
+If you want to add tests, lightweight candidates are:
+
+- `ProjectFormPage` validation rules (required fields, due date checks)
+- invoice line-item total calculations
+
+## Design polish focus
+
+- client names are shown instead of raw IDs on list and detail views
+- clearer role-specific copy on dashboard/list pages
+- search + status filters with clear actions
+- stronger project/invoice validation feedback
+- removed Vite scaffolding leftovers (`src/App.css`, old SVG assets)
+
+## Local architecture notes
+
+- Data layer and auth are split (`DataContext`, `AuthContext`) for easy future API swap.
+- Forms are schema-validated with Zod + React Hook Form for realistic quality signals.
+- Route guards are centralized (`ProtectedRoute`) for consistent RBAC behavior.
+
+## Future upgrade ideas
+
+- Replace localStorage with JWT/session-backed auth
+- Add backend-backed APIs for projects/invoices
+- Add invoice PDF export and email trigger flow
+- Add automated tests with Playwright/Vitest for critical flows

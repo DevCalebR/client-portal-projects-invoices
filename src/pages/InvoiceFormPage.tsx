@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo } from 'react'
 import { useFieldArray, useForm, useWatch, type SubmitHandler } from 'react-hook-form'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
@@ -68,6 +68,8 @@ export const InvoiceFormPage = () => {
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const queryProjectId = searchParams.get('projectId')
   const {
     projects,
     createInvoice,
@@ -78,14 +80,16 @@ export const InvoiceFormPage = () => {
   } = useData()
 
   const currentInvoice = isEdit && id ? getInvoice(id) : null
+  const prefillProject = queryProjectId ? projects.find((project) => project.id === queryProjectId) : null
 
   const initialDate = getInputDate(new Date().toISOString())
   const activeProjectOptions = projects
 
   const initialValues = useMemo<InvoiceFormValues>(
     () => ({
-      projectId: currentInvoice?.projectId ?? activeProjectOptions[0]?.id ?? '',
-      clientId: currentInvoice?.clientId ?? activeProjectOptions[0]?.clientId ?? '',
+      projectId: currentInvoice?.projectId ?? prefillProject?.id ?? activeProjectOptions[0]?.id ?? '',
+      clientId:
+        currentInvoice?.clientId ?? prefillProject?.clientId ?? activeProjectOptions[0]?.clientId ?? '',
       status: currentInvoice?.status ?? 'draft',
       issueDate: currentInvoice ? getInputDate(currentInvoice.issueDate) : initialDate,
       dueDate: currentInvoice ? getInputDate(currentInvoice.dueDate) : initialDate,
@@ -100,7 +104,7 @@ export const InvoiceFormPage = () => {
           { id: undefined, description: '', quantity: 1, rate: 0 },
         ],
     }),
-    [activeProjectOptions, currentInvoice, initialDate],
+    [activeProjectOptions, currentInvoice, initialDate, prefillProject?.clientId, prefillProject?.id],
   )
 
   const {
@@ -180,6 +184,20 @@ export const InvoiceFormPage = () => {
     return null
   }
 
+  if (!isLoading && activeProjectOptions.length === 0) {
+    return (
+      <section className="card">
+        <h1>Can't create an invoice yet</h1>
+        <p className="muted">
+          No projects are available yet. Create a project first, then return to build an invoice.
+        </p>
+        <Link className="btn btn--primary" to="/projects/new">
+          Create a project
+        </Link>
+      </section>
+    )
+  }
+
   return (
     <section className="card">
       <div className="panel-head panel-head--tight">
@@ -204,7 +222,7 @@ export const InvoiceFormPage = () => {
 
         <label>
           Client
-          <input {...register('clientId')} readOnly />
+          <input {...register('clientId')} readOnly disabled={isSubmitting} />
           {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
         </label>
 
@@ -223,19 +241,19 @@ export const InvoiceFormPage = () => {
         <div className="form-row">
           <label>
             Issue date
-            <input type="date" {...register('issueDate')} />
+            <input type="date" {...register('issueDate')} disabled={isSubmitting} />
             {errors.issueDate ? <p className="error">{errors.issueDate.message}</p> : null}
           </label>
           <label>
             Due date
-            <input type="date" {...register('dueDate')} />
+            <input type="date" {...register('dueDate')} disabled={isSubmitting} />
             {errors.dueDate ? <p className="error">{errors.dueDate.message}</p> : null}
           </label>
         </div>
 
         <label>
           Invoice notes
-          <textarea {...register('notes')} rows={4} />
+          <textarea {...register('notes')} rows={4} disabled={isSubmitting} />
           {errors.notes ? <p className="error">{errors.notes.message}</p> : null}
         </label>
 
@@ -258,6 +276,7 @@ export const InvoiceFormPage = () => {
                 <input
                   {...register(`lineItems.${index}.description` as const)}
                   placeholder="Design review"
+                  disabled={isSubmitting}
                 />
                 {errors.lineItems?.[index]?.description ? (
                   <p className="error">{errors.lineItems[index]?.description?.message}</p>
@@ -269,6 +288,7 @@ export const InvoiceFormPage = () => {
                   type="number"
                   step="1"
                   min="1"
+                  disabled={isSubmitting}
                   {...register(`lineItems.${index}.quantity` as const, {
                     valueAsNumber: true,
                   })}
@@ -283,6 +303,7 @@ export const InvoiceFormPage = () => {
                   type="number"
                   step="0.01"
                   min="0.01"
+                  disabled={isSubmitting}
                   {...register(`lineItems.${index}.rate` as const, {
                     valueAsNumber: true,
                   })}

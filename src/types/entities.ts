@@ -72,9 +72,6 @@ export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
   overdue: 'Overdue',
 }
 
-export const isClientUser = (user: PublicUser | null): boolean =>
-  user?.role === 'client'
-
 export const isAdminUser = (user: PublicUser | null): boolean =>
   user?.role === 'admin'
 

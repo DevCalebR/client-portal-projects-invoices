@@ -8,23 +8,33 @@ import { useData } from '../context/DataContext'
 import { isAdminUser, PROJECT_STATUS_OPTIONS, PROJECT_STATUS_LABELS, type ProjectInput } from '../types/entities'
 import { getInputDate } from '../utils/format'
 
-const projectSchema = z.object({
-  name: z.string().trim().min(2, 'Project name is required.'),
-  clientId: z.string().trim().min(5, 'Assign a client.'),
-  status: z.enum(PROJECT_STATUS_OPTIONS),
-  dueDate: z.string().optional(),
-  notes: z.string().trim().max(1000, 'Keep notes under 1000 characters.').optional(),
-})
+const projectSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Project name is required.'),
+    clientId: z.string().trim().min(5, 'Assign a client.'),
+    status: z.enum(PROJECT_STATUS_OPTIONS),
+    dueDate: z.string().optional(),
+    notes: z.string().trim().max(1000, 'Keep notes under 1000 characters.').optional(),
+  })
+  .superRefine((data, context) => {
+    if (!data.dueDate) {
+      return
+    }
+
+    const parsed = Date.parse(data.dueDate)
+    if (Number.isNaN(parsed)) {
+      context.addIssue({
+        path: ['dueDate'],
+        code: z.ZodIssueCode.custom,
+        message: 'Due date is invalid.',
+      })
+    }
+  })
 
 type ProjectFormValues = z.infer<typeof projectSchema>
 
-const DEMO_CLIENT_OPTIONS = [
-  { value: 'user-client-001', label: 'Maya Johnson (Luna Studio)' },
-  { value: 'user-client-002', label: 'Noah Rivera (Lakeside Interiors)' },
-]
-
 export const ProjectFormPage = () => {
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isEdit = Boolean(id)
@@ -37,15 +47,17 @@ export const ProjectFormPage = () => {
 
   const existing = isEdit && id ? getProject(id) : null
 
+  const clientOptions = users.filter((person) => person.role === 'client')
+
   const defaultValues = useMemo<ProjectFormValues>(
     () => ({
       name: existing?.name ?? '',
-      clientId: existing?.clientId ?? DEMO_CLIENT_OPTIONS[0]?.value ?? '',
+      clientId: existing?.clientId ?? clientOptions[0]?.id ?? '',
       status: existing?.status ?? 'planning',
       dueDate: getInputDate(existing?.dueDate),
       notes: existing?.notes ?? '',
     }),
-    [existing],
+    [clientOptions, existing],
   )
 
   const {
@@ -94,6 +106,15 @@ export const ProjectFormPage = () => {
     )
   }
 
+  if (!isLoading && !isEdit && clientOptions.length === 0) {
+    return (
+      <section className="card">
+        <h1>Client list unavailable</h1>
+        <p className="muted">No client accounts are currently available. Add seeded clients first.</p>
+      </section>
+    )
+  }
+
   return (
     <section className="card">
       <div className="panel-head panel-head--tight">
@@ -113,12 +134,16 @@ export const ProjectFormPage = () => {
         <label>
           Client
           <select {...register('clientId')} disabled={isSubmitting}>
-            {DEMO_CLIENT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            {clientOptions.length === 0 ? <option value="">No clients available</option> : null}
+            {clientOptions.map((client) => (
+              <option key={client.id} value={client.id}>
+                {`${client.name}${client.company ? ` • ${client.company}` : ''}`}
               </option>
             ))}
           </select>
+          {clientOptions.length === 0 ? (
+            <p className="error">No client users are seeded. Add clients before creating projects.</p>
+          ) : null}
           {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
         </label>
 

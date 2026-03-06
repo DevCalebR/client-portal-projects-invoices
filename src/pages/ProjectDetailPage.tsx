@@ -6,7 +6,7 @@ import { formatDate } from '../utils/format'
 import { StatusBadge } from '../components/StatusBadge'
 
 export const ProjectDetailPage = () => {
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { invoices, getProject } = useData()
@@ -36,6 +36,7 @@ export const ProjectDetailPage = () => {
   }
 
   const projectInvoices = invoices.filter((invoice) => invoice.projectId === project.id)
+  const clientName = users.find((person) => person.id === project.clientId)?.name ?? project.clientId
 
   return (
     <div className="page-stack">
@@ -57,7 +58,8 @@ export const ProjectDetailPage = () => {
           </div>
           <div>
             <p className="muted">Client ID</p>
-            <p>{project.clientId}</p>
+            <p>{clientName}</p>
+            <small className="muted">({project.clientId})</small>
           </div>
           <div>
             <p className="muted">Due date</p>
@@ -73,6 +75,9 @@ export const ProjectDetailPage = () => {
           <div className="panel-actions">
             <Link to={`/projects/${project.id}/edit`} className="btn btn--primary">
               Edit project
+            </Link>
+            <Link to={`/invoices/new?projectId=${project.id}`} className="btn btn--ghost">
+              Create invoice
             </Link>
           </div>
         ) : null}
