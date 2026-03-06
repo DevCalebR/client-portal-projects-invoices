@@ -36,6 +36,11 @@ Use one of these accounts from the login page:
 - Client: `client@example.com` / `client123`
 - Additional seeded client: `noah@lakeside.co` / `client456`
 
+## Live demo
+
+- Production URL: https://client-portal-projects-invoices.netlify.app
+- This is a demo app using seeded local data and local-only authentication/session persistence.
+
 ### Role behavior at a glance
 
 - Admin dashboard shows global cards and unfiltered lists.
