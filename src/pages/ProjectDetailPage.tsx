@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { isAdminUser } from '../types/entities'
@@ -8,7 +8,6 @@ import { StatusBadge } from '../components/StatusBadge'
 export const ProjectDetailPage = () => {
   const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const { invoices, getProject } = useData()
 
   if (!user || !id) {
@@ -31,8 +30,7 @@ export const ProjectDetailPage = () => {
 
   const canView = isAdminUser(user) || project.clientId === user.id
   if (!canView) {
-    navigate('/projects', { replace: true })
-    return null
+    return <Navigate to="/projects" replace />
   }
 
   const projectInvoices = invoices.filter((invoice) => invoice.projectId === project.id)

@@ -10,7 +10,13 @@ export const SettingsPage = () => {
     return null
   }
 
+  const isAdmin = isAdminUser(user)
+
   const handleReset = () => {
+    if (!isAdmin) {
+      return
+    }
+
     const shouldReset = window.confirm(
       'This will replace current projects/invoices with seed data. Continue?',
     )
@@ -48,18 +54,28 @@ export const SettingsPage = () => {
         </div>
       </section>
 
-      <section className="card">
-        <h2>Storage behavior</h2>
-        <p>
-          Data is stored with stable localStorage keys and seeded demo content is only written if local keys
-          are missing. Use this for realistic portfolio demos without a backend.
-        </p>
-        <button className="btn btn--primary" onClick={handleReset}>
-          Restore seeded demo data
-        </button>
-      </section>
+      {isAdmin ? (
+        <section className="card">
+          <h2>Storage behavior</h2>
+          <p>
+            Data is stored with stable localStorage keys and seeded demo content is only written if local keys
+            are missing. Use this for realistic portfolio demos without a backend.
+          </p>
+          <button className="btn btn--primary" onClick={handleReset} type="button">
+            Restore seeded demo data
+          </button>
+        </section>
+      ) : (
+        <section className="card">
+          <h2>Access level</h2>
+          <p>
+            Client accounts can review only their assigned projects and invoices. Changes to demo data are
+            limited to admin accounts.
+          </p>
+        </section>
+      )}
 
-      {isAdminUser(user) ? (
+      {isAdmin ? (
         <section className="card">
           <h2>Admin note</h2>
           <p>

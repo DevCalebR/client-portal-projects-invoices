@@ -47,7 +47,10 @@ export const ProjectFormPage = () => {
 
   const existing = isEdit && id ? getProject(id) : null
 
-  const clientOptions = users.filter((person) => person.role === 'client')
+  const clientOptions = useMemo(
+    () => users.filter((person) => person.role === 'client'),
+    [users],
+  )
 
   const defaultValues = useMemo<ProjectFormValues>(
     () => ({

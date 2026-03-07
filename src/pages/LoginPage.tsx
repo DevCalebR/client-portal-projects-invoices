@@ -67,13 +67,13 @@ export const LoginPage = () => {
         <form onSubmit={handleSubmit(onSubmit)} className="form-stack">
           <label>
             Email
-            <input type="email" {...register('email')} />
+            <input type="email" autoComplete="username" {...register('email')} />
           </label>
           {errors.email ? <p className="error">{errors.email.message}</p> : null}
 
           <label>
             Password
-            <input type="password" {...register('password')} />
+            <input type="password" autoComplete="current-password" {...register('password')} />
           </label>
           {errors.password ? <p className="error">{errors.password.message}</p> : null}
 

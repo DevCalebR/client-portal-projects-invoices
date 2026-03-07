@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { isAdminUser } from '../types/entities'
@@ -9,7 +9,6 @@ import { EmptyState } from '../components/EmptyState'
 export const InvoiceDetailPage = () => {
   const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const { getInvoice, getProject, isLoading } = useData()
 
   if (!user || !id) {
@@ -28,8 +27,7 @@ export const InvoiceDetailPage = () => {
   }
 
   if (user.role === 'client' && invoice.clientId !== user.id) {
-    navigate('/invoices', { replace: true })
-    return null
+    return <Navigate to="/invoices" replace />
   }
 
   const project = getProject(invoice.projectId)
