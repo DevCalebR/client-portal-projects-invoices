@@ -1,5 +1,5 @@
-import type { ProjectStatus, InvoiceStatus } from '../types/entities'
-import { PROJECT_STATUS_LABELS, INVOICE_STATUS_LABELS } from '../types/entities'
+import type { InvoiceStatus, PaymentStatus, ProjectStatus } from '../types/entities'
+import { INVOICE_STATUS_LABELS, PROJECT_STATUS_LABELS } from '../types/entities'
 
 type StatusBadgeProps =
   | {
@@ -10,16 +10,20 @@ type StatusBadgeProps =
       type: 'invoice'
       status: InvoiceStatus
     }
+  | {
+      type: 'payment'
+      status: PaymentStatus
+    }
 
 const getProjectClass = (status: ProjectStatus): string => {
   switch (status) {
-    case 'planning':
+    case 'PLANNING':
+    case 'IN_PROGRESS':
       return 'badge badge--info'
-    case 'in_progress':
-      return 'badge badge--info'
-    case 'review':
+    case 'REVIEW':
+    case 'ON_HOLD':
       return 'badge badge--warning'
-    case 'completed':
+    case 'COMPLETED':
       return 'badge badge--success'
     default:
       return 'badge'
@@ -28,13 +32,32 @@ const getProjectClass = (status: ProjectStatus): string => {
 
 const getInvoiceClass = (status: InvoiceStatus): string => {
   switch (status) {
-    case 'paid':
+    case 'PAID':
       return 'badge badge--success'
-    case 'unpaid':
+    case 'OPEN':
+    case 'SENT':
+    case 'PARTIALLY_PAID':
       return 'badge badge--warning'
-    case 'overdue':
+    case 'OVERDUE':
       return 'badge badge--danger'
-    case 'draft':
+    case 'DRAFT':
+    case 'VOID':
+      return 'badge badge--neutral'
+    default:
+      return 'badge'
+  }
+}
+
+const getPaymentClass = (status: PaymentStatus): string => {
+  switch (status) {
+    case 'SUCCEEDED':
+      return 'badge badge--success'
+    case 'PENDING':
+      return 'badge badge--warning'
+    case 'FAILED':
+    case 'CANCELED':
+      return 'badge badge--danger'
+    case 'REFUNDED':
       return 'badge badge--neutral'
     default:
       return 'badge'
@@ -46,5 +69,9 @@ export const StatusBadge = ({ type, status }: StatusBadgeProps) => {
     return <span className={getProjectClass(status)}>{PROJECT_STATUS_LABELS[status]}</span>
   }
 
-  return <span className={getInvoiceClass(status)}>{INVOICE_STATUS_LABELS[status]}</span>
+  if (type === 'invoice') {
+    return <span className={getInvoiceClass(status)}>{INVOICE_STATUS_LABELS[status]}</span>
+  }
+
+  return <span className={getPaymentClass(status)}>{status.replaceAll('_', ' ')}</span>
 }

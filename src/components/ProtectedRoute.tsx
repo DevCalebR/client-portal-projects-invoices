@@ -1,34 +1,43 @@
 import { Navigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { isAdminUser } from '../types/entities'
+import { type OrganizationRole, isInternalRole } from '../types/entities'
 
 type ProtectedRouteProps = {
   children: ReactNode
-  allowedRoles?: Array<'admin' | 'client'>
+  allowedRoles?: OrganizationRole[]
+  requireOrganization?: boolean
 }
 
-export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
-  const { user, loading } = useAuth()
+export const ProtectedRoute = ({
+  children,
+  allowedRoles,
+  requireOrganization = true,
+}: ProtectedRouteProps) => {
+  const { user, organization, membership, loading, isSignedIn } = useAuth()
 
   if (loading) {
     return (
       <section className="card">
-        <p className="loading-placeholder">Loading account session...</p>
+        <p className="loading-placeholder">Loading your workspace...</p>
       </section>
     )
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
+  if (!isSignedIn || !user) {
+    return <Navigate to="/sign-in" replace />
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    if (isAdminUser(user)) {
+  if (requireOrganization && !organization) {
+    return <Navigate to="/onboarding" replace />
+  }
+
+  if (allowedRoles && membership && !allowedRoles.includes(membership.role)) {
+    if (isInternalRole(membership.role)) {
       return <Navigate to="/dashboard" replace />
     }
 
-    return <Navigate to="/projects" replace />
+    return <Navigate to="/invoices" replace />
   }
 
   return <>{children}</>

@@ -59,10 +59,11 @@ export const getInputDate = (value?: string): string => {
 }
 
 export const calculateInvoiceSubtotal = (
-  lineItems: Array<{ quantity: number; rate: number }>,
+  lineItems: Array<{ quantity: number; rate?: number; unitPrice?: number }>,
 ): number =>
   lineItems.reduce((sum, item) => {
-    const lineTotal = item.quantity * item.rate
+    const unitPrice = item.rate ?? item.unitPrice ?? 0
+    const lineTotal = item.quantity * unitPrice
     return Math.round((sum + lineTotal) * 100) / 100
   }, 0)
 

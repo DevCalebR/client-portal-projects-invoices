@@ -1,70 +1,43 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
 import { Notice } from '../components/Notice'
-import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { useFeedback } from '../context/FeedbackContext'
-import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_STATUS_OPTIONS,
-  isAdminUser,
-  type ProjectInput,
-} from '../types/entities'
-import { getInputDate } from '../utils/format'
+import { PROJECT_STATUS_LABELS, PROJECT_STATUS_OPTIONS, type ProjectInput } from '../types/entities'
+import { getInputDate, toIsoDate } from '../utils/format'
 import { logAppError } from '../utils/logger'
 
-const projectSchema = z
-  .object({
-    name: z.string().trim().min(2, 'Project name is required.'),
-    clientId: z.string().trim().min(5, 'Assign a client.'),
-    status: z.enum(PROJECT_STATUS_OPTIONS),
-    dueDate: z.string().optional(),
-    notes: z.string().trim().max(1000, 'Keep notes under 1000 characters.').optional(),
-  })
-  .superRefine((data, context) => {
-    if (!data.dueDate) {
-      return
-    }
-
-    const parsed = Date.parse(data.dueDate)
-    if (Number.isNaN(parsed)) {
-      context.addIssue({
-        path: ['dueDate'],
-        code: z.ZodIssueCode.custom,
-        message: 'Due date is invalid.',
-      })
-    }
-  })
+const projectSchema = z.object({
+  name: z.string().trim().min(2, 'Project name is required.'),
+  description: z.string().trim().max(4000, 'Keep project scope under 4000 characters.').optional(),
+  clientId: z.string().trim().min(1, 'Assign a client.'),
+  status: z.enum(PROJECT_STATUS_OPTIONS),
+  dueDate: z.string().optional(),
+})
 
 type ProjectFormValues = z.infer<typeof projectSchema>
 
 export const ProjectFormPage = () => {
-  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { notify } = useFeedback()
   const isEdit = Boolean(id)
-  const { createProject, updateProject, getProject, isLoading } = useData()
+  const { clients, createProject, updateProject, getProject, isLoading } = useData()
 
   const existing = isEdit && id ? getProject(id) : null
-
-  const clientOptions = useMemo(
-    () => users.filter((person) => person.role === 'client'),
-    [users],
-  )
 
   const defaultValues = useMemo<ProjectFormValues>(
     () => ({
       name: existing?.name ?? '',
-      clientId: existing?.clientId ?? clientOptions[0]?.id ?? '',
-      status: existing?.status ?? 'planning',
-      dueDate: getInputDate(existing?.dueDate),
-      notes: existing?.notes ?? '',
+      description: existing?.description ?? '',
+      clientId: existing?.client.id ?? clients[0]?.id ?? '',
+      status: existing?.status ?? 'PLANNING',
+      dueDate: getInputDate(existing?.dueDate ?? undefined),
     }),
-    [clientOptions, existing],
+    [clients, existing],
   )
 
   const {
@@ -82,31 +55,33 @@ export const ProjectFormPage = () => {
     if (!isLoading) {
       reset(defaultValues)
     }
-  }, [isLoading, defaultValues, reset])
+  }, [defaultValues, isLoading, reset])
 
   const onSubmit = async (values: ProjectFormValues) => {
     const payload: ProjectInput = {
-      ...values,
-      dueDate: values.dueDate || undefined,
-      notes: values.notes || '',
+      name: values.name,
+      description: values.description || undefined,
+      clientId: values.clientId,
+      status: values.status,
+      dueDate: values.dueDate ? toIsoDate(values.dueDate) : null,
     }
 
     try {
       if (isEdit && id) {
-        updateProject(id, payload)
+        const updated = await updateProject(id, payload)
         notify({
           title: 'Project updated',
-          message: 'The project details were saved successfully.',
+          message: `${updated.name} was saved successfully.`,
           tone: 'success',
         })
         navigate(`/projects/${id}`)
         return
       }
 
-      const created = createProject(payload)
+      const created = await createProject(payload)
       notify({
         title: 'Project created',
-        message: 'The new project is ready for invoice and status tracking.',
+        message: `${created.name} is ready for delivery tracking.`,
         tone: 'success',
       })
       navigate(`/projects/${created.id}`)
@@ -117,10 +92,6 @@ export const ProjectFormPage = () => {
         message: error instanceof Error ? error.message : 'Unable to save this project.',
       })
     }
-  }
-
-  if (!user || !isAdminUser(user)) {
-    return null
   }
 
   if (isLoading) {
@@ -135,16 +106,22 @@ export const ProjectFormPage = () => {
     return (
       <section className="card">
         <h1>Project not found</h1>
-        <p>This project does not exist and cannot be edited.</p>
+        <p>This project does not exist or is no longer accessible.</p>
+        <Link className="btn btn--primary" to="/projects">
+          Back to projects
+        </Link>
       </section>
     )
   }
 
-  if (!isEdit && clientOptions.length === 0) {
+  if (!isEdit && clients.length === 0) {
     return (
       <section className="card">
-        <h1>Client list unavailable</h1>
-        <p className="muted">No client accounts are currently available. Add seeded clients first.</p>
+        <h1>No clients available</h1>
+        <p className="muted">Create a client record in Settings before creating projects.</p>
+        <Link className="btn btn--primary" to="/settings">
+          Open settings
+        </Link>
       </section>
     )
   }
@@ -163,7 +140,7 @@ export const ProjectFormPage = () => {
           Project name
           <input
             {...register('name')}
-            placeholder="Brand refresh, landing page, onboarding, etc."
+            placeholder="Retention analytics dashboard"
             disabled={isSubmitting}
           />
           {errors.name ? <p className="error">{errors.name.message}</p> : null}
@@ -172,16 +149,12 @@ export const ProjectFormPage = () => {
         <label>
           Client
           <select {...register('clientId')} disabled={isSubmitting}>
-            {clientOptions.length === 0 ? <option value="">No clients available</option> : null}
-            {clientOptions.map((client) => (
+            {clients.map((client) => (
               <option key={client.id} value={client.id}>
                 {`${client.name}${client.company ? ` • ${client.company}` : ''}`}
               </option>
             ))}
           </select>
-          {clientOptions.length === 0 ? (
-            <p className="error">No client users are seeded. Add clients before creating projects.</p>
-          ) : null}
           {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
         </label>
 
@@ -204,9 +177,9 @@ export const ProjectFormPage = () => {
         </label>
 
         <label>
-          Notes
-          <textarea {...register('notes')} rows={6} disabled={isSubmitting} />
-          {errors.notes ? <p className="error">{errors.notes.message}</p> : null}
+          Scope and notes
+          <textarea {...register('description')} rows={6} disabled={isSubmitting} />
+          {errors.description ? <p className="error">{errors.description.message}</p> : null}
         </label>
 
         <div className="form-actions">

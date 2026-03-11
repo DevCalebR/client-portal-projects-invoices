@@ -5,12 +5,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { useFeedback } from '../context/FeedbackContext'
-import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_STATUS_OPTIONS,
-  isAdminUser,
-  type ProjectStatus,
-} from '../types/entities'
+import { PROJECT_STATUS_LABELS, PROJECT_STATUS_OPTIONS, isAdminRole, isInternalRole, type ProjectStatus } from '../types/entities'
 import { logAppError } from '../utils/logger'
 import { formatDate } from '../utils/format'
 
@@ -19,28 +14,20 @@ const projectStatusFromValue = (value: string): ProjectStatus | 'all' =>
 
 export const ProjectsPage = () => {
   const navigate = useNavigate()
-  const { user, users } = useAuth()
+  const { membership } = useAuth()
   const { projects, isLoading, deleteProject } = useData()
   const { notify } = useFeedback()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all')
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const getClientName = (clientId: string) =>
-    users.find((person) => person.id === clientId)?.name ?? clientId
+  const canEdit = isInternalRole(membership?.role)
+  const canDelete = isAdminRole(membership?.role)
 
-  if (!user) {
-    return null
-  }
-
-  const canEdit = isAdminUser(user)
-
-  const visibleProjects = projects.filter((project) => (canEdit ? true : project.clientId === user.id))
-
-  const filteredProjects = visibleProjects
+  const filteredProjects = projects
     .filter((project) => {
       const lowered = search.toLowerCase()
-      const haystack = `${project.name} ${getClientName(project.clientId)} ${project.notes}`.toLowerCase()
+      const haystack = `${project.name} ${project.client.name} ${project.description ?? ''}`.toLowerCase()
       return haystack.includes(lowered)
     })
     .filter((project) => (statusFilter === 'all' ? true : project.status === statusFilter))
@@ -50,9 +37,9 @@ export const ProjectsPage = () => {
     setStatusFilter('all')
   }
 
-  const handleDelete = (projectId: string, projectName: string) => {
+  const handleDelete = async (projectId: string, projectName: string) => {
     const shouldDelete = window.confirm(
-      `Delete "${projectName}"? Linked invoices for this project will also be removed.`,
+      `Delete "${projectName}"? This will remove the project from the organization workspace.`,
     )
 
     if (!shouldDelete) {
@@ -61,10 +48,10 @@ export const ProjectsPage = () => {
 
     try {
       setPendingDeleteId(projectId)
-      deleteProject(projectId)
+      await deleteProject(projectId)
       notify({
         title: 'Project deleted',
-        message: `"${projectName}" and any linked invoices were removed.`,
+        message: `"${projectName}" was removed from the workspace.`,
         tone: 'success',
       })
     } catch (error) {
@@ -83,7 +70,7 @@ export const ProjectsPage = () => {
     <div className="page-stack">
       <div className="page-head page-head--actions">
         <div>
-          <h1>{canEdit ? 'All Projects' : 'My Projects'}</h1>
+          <h1>{canEdit ? 'Projects' : 'My Projects'}</h1>
           <p>{filteredProjects.length} project(s) found</p>
         </div>
         {canEdit ? (
@@ -95,7 +82,7 @@ export const ProjectsPage = () => {
 
       <section className="card filter-bar">
         <input
-          placeholder="Search by project name, client, notes"
+          placeholder="Search by project name, client, or description"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -124,7 +111,7 @@ export const ProjectsPage = () => {
           title="No projects found"
           message={
             canEdit
-              ? 'Try adjusting search and status filters or create a new project from the button above.'
+              ? 'Try adjusting search and status filters or create a new project.'
               : 'No assigned projects match the current filters.'
           }
           action={
@@ -155,26 +142,24 @@ export const ProjectsPage = () => {
                     <td>
                       <Link to={`/projects/${project.id}`}>{project.name}</Link>
                     </td>
-                    <td>{getClientName(project.clientId)}</td>
+                    <td>{project.client.name}</td>
                     <td>
                       <StatusBadge type="project" status={project.status} />
                     </td>
-                    <td>{formatDate(project.dueDate)}</td>
+                    <td>{formatDate(project.dueDate ?? undefined)}</td>
                     <td>{formatDate(project.updatedAt)}</td>
                     <td className="actions">
                       <Link to={`/projects/${project.id}`}>View</Link>
-                      {canEdit ? (
-                        <>
-                          <Link to={`/projects/${project.id}/edit`}>Edit</Link>
-                          <button
-                            className="btn btn--danger btn--sm"
-                            onClick={() => handleDelete(project.id, project.name)}
-                            type="button"
-                            disabled={pendingDeleteId === project.id}
-                          >
-                            {pendingDeleteId === project.id ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </>
+                      {canEdit ? <Link to={`/projects/${project.id}/edit`}>Edit</Link> : null}
+                      {canDelete ? (
+                        <button
+                          className="btn btn--danger btn--sm"
+                          onClick={() => void handleDelete(project.id, project.name)}
+                          type="button"
+                          disabled={pendingDeleteId === project.id}
+                        >
+                          {pendingDeleteId === project.id ? 'Deleting...' : 'Delete'}
+                        </button>
                       ) : null}
                     </td>
                   </tr>

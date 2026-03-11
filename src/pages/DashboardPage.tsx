@@ -3,7 +3,7 @@ import { EmptyState } from '../components/EmptyState'
 import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { isAdminUser } from '../types/entities'
+import { BILLING_PLAN_LABELS, isInternalRole } from '../types/entities'
 import { formatCurrency, formatDate, formatDateTime } from '../utils/format'
 
 const DashboardCard = ({
@@ -23,95 +23,63 @@ const DashboardCard = ({
 )
 
 export const DashboardPage = () => {
-  const { user, users } = useAuth()
-  const { projects, invoices, activities, isLoading } = useData()
+  const { user, membership, organization } = useAuth()
+  const { projects, invoices, activities, notifications, isLoading } = useData()
 
-  if (!user) {
+  if (!user || !membership || !organization) {
     return null
   }
 
-  const isAdmin = isAdminUser(user)
-  const visibleProjects = isAdmin
-    ? projects
-    : projects.filter((project) => project.clientId === user.id)
-  const visibleInvoices = isAdmin
-    ? invoices
-    : invoices.filter((invoice) => invoice.clientId === user.id)
-  const visibleProjectIds = new Set(visibleProjects.map((project) => project.id))
-  const visibleInvoiceIds = new Set(visibleInvoices.map((invoice) => invoice.id))
-  const visibleActivities = activities.filter((activity) => {
-    if (isAdmin) {
-      return true
-    }
-
-    if (activity.subjectType === 'project') {
-      return visibleProjectIds.has(activity.subjectId)
-    }
-
-    if (activity.subjectType === 'invoice') {
-      return visibleInvoiceIds.has(activity.subjectId)
-    }
-
-    return activity.actorId === user.id
-  })
-
-  const activeProjects = visibleProjects.filter((project) => project.status !== 'completed').length
-  const unpaidCount = visibleInvoices.filter((invoice) => invoice.status === 'unpaid').length
-  const paidCount = visibleInvoices.filter((invoice) => invoice.status === 'paid').length
-  const overdueCount = visibleInvoices.filter((invoice) => invoice.status === 'overdue').length
-  const outstandingBalance = visibleInvoices
-    .filter((invoice) => invoice.status !== 'paid')
-    .reduce((sum, invoice) => sum + invoice.total, 0)
-  const getClientName = (clientId: string) =>
-    users.find((person) => person.id === clientId)?.name ?? 'Unassigned client'
+  const isInternal = isInternalRole(membership.role)
+  const activeProjects = projects.filter((project) => project.status !== 'COMPLETED').length
+  const openInvoices = invoices.filter((invoice) =>
+    ['OPEN', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'].includes(invoice.status),
+  )
+  const outstandingBalance = openInvoices.reduce((sum, invoice) => sum + invoice.balanceDue, 0)
+  const unreadNotifications = notifications.filter((notification) => !notification.readAt).length
 
   if (isLoading) {
-    return <p className="loading-placeholder">Loading dashboard data...</p>
+    return <p className="loading-placeholder">Loading workspace data...</p>
   }
 
   return (
     <div className="page-stack">
       <header className="page-head">
         <div>
-          <h1>Welcome back, {user.name}</h1>
+          <h1>Welcome back, {user.fullName}</h1>
           <p>
-            {isAdmin
-              ? 'Admin view of all projects and invoices in the client portal.'
-              : 'Your assigned projects and invoices, with instant visibility.'}
+            {isInternal
+              ? 'Internal workspace view across all organization projects, invoices, and notifications.'
+              : 'Client workspace view scoped to your projects, invoices, and payment activity.'}
           </p>
         </div>
       </header>
 
       <section className="stats-grid">
         <DashboardCard
-          label="Total Projects"
-          value={String(visibleProjects.length)}
-          hint="Active + completed"
+          label="Plan"
+          value={BILLING_PLAN_LABELS[organization.plan]}
+          hint={`Subscription status: ${organization.subscriptionStatus.toLowerCase().replaceAll('_', ' ')}`}
         />
         <DashboardCard
-          label="Active Work"
-          value={String(activeProjects)}
-          hint="In planning, progress, and review"
+          label="Projects"
+          value={String(projects.length)}
+          hint={`${activeProjects} currently active`}
         />
         <DashboardCard
-          label="Paid Invoices"
-          value={String(paidCount)}
-          hint="Marked as paid"
+          label="Open invoices"
+          value={String(openInvoices.length)}
+          hint="Invoices awaiting payment or follow-up"
         />
         <DashboardCard
-          label="Unpaid Invoices"
-          value={String(unpaidCount)}
-          hint={isAdmin ? 'Waiting for client payment' : 'Your outstanding items'}
-        />
-        <DashboardCard
-          label="Overdue Invoices"
-          value={String(overdueCount)}
-          hint="Requires follow-up"
-        />
-        <DashboardCard
-          label="Outstanding Balance"
+          label="Outstanding balance"
           value={formatCurrency(outstandingBalance)}
-          hint={isAdmin ? 'Open invoice value across the portal' : 'Amount still pending'}
+          hint="Current unpaid balance"
+        />
+        <DashboardCard
+          label="Unread notifications"
+          value={String(unreadNotifications)}
+          hint="Persistent inbox items for this workspace"
         />
       </section>
 
@@ -120,36 +88,36 @@ export const DashboardPage = () => {
           <div>
             <h2>Quick actions</h2>
             <p className="muted">
-              {isAdmin
-                ? 'Jump directly into the most common admin workflows.'
-                : 'Open the areas that need attention first.'}
+              {isInternal
+                ? 'Create new work, send invoices, and manage billing or team access.'
+                : 'Review project progress, invoices, and recent updates.'}
             </p>
           </div>
         </div>
         <div className="quick-action-grid">
           <Link className="action-card" to="/projects">
             <strong>Browse projects</strong>
-            <span>Review project status, deadlines, and scope.</span>
+            <span>Track active delivery work and deadlines.</span>
           </Link>
           <Link className="action-card" to="/invoices">
             <strong>Open invoices</strong>
-            <span>Track payment status and outstanding balances.</span>
+            <span>Review invoice status and payment progress.</span>
           </Link>
-          {isAdmin ? (
+          {isInternal ? (
             <>
               <Link className="action-card" to="/projects/new">
                 <strong>Create project</strong>
-                <span>Start a new client delivery workflow.</span>
+                <span>Start a new project for a client in this organization.</span>
               </Link>
-              <Link className="action-card" to="/invoices/new">
-                <strong>Create invoice</strong>
-                <span>Generate a new invoice from an active project.</span>
+              <Link className="action-card" to="/settings">
+                <strong>Billing and team</strong>
+                <span>Manage subscriptions, invites, and workspace settings.</span>
               </Link>
             </>
           ) : (
             <Link className="action-card" to="/settings">
-              <strong>Review account settings</strong>
-              <span>Check access scope and session details.</span>
+              <strong>Notification center</strong>
+              <span>Review unread updates and account access details.</span>
             </Link>
           )}
         </div>
@@ -163,18 +131,25 @@ export const DashboardPage = () => {
               Go to projects
             </Link>
           </div>
-          {visibleProjects.length === 0 ? (
-            <p className="muted">No projects are currently assigned to this account.</p>
+          {projects.length === 0 ? (
+            <EmptyState
+              title="No projects yet"
+              message={
+                isInternal
+                  ? 'Create your first client project to start tracking delivery.'
+                  : 'No projects are currently assigned to your account.'
+              }
+            />
           ) : (
             <ul className="list">
-              {visibleProjects.slice(0, 5).map((project) => (
+              {projects.slice(0, 5).map((project) => (
                 <li key={project.id} className="list-item">
                   <div>
                     <Link to={`/projects/${project.id}`} className="link-strong">
                       {project.name}
                     </Link>
                     <small>
-                      Client: {getClientName(project.clientId)} • Due {formatDate(project.dueDate)}
+                      Client: {project.client.name} • Due {formatDate(project.dueDate ?? undefined)}
                     </small>
                   </div>
                   <StatusBadge type="project" status={project.status} />
@@ -191,19 +166,21 @@ export const DashboardPage = () => {
               Go to invoices
             </Link>
           </div>
-          {visibleInvoices.length === 0 ? (
-            <p className="muted">No invoices are currently available.</p>
+          {invoices.length === 0 ? (
+            <EmptyState
+              title="No invoices yet"
+              message="Invoice activity will appear here once invoices are issued."
+            />
           ) : (
             <ul className="list">
-              {visibleInvoices.slice(0, 5).map((invoice) => (
+              {invoices.slice(0, 5).map((invoice) => (
                 <li key={invoice.id} className="list-item list-item--spread">
                   <div>
                     <Link to={`/invoices/${invoice.id}`} className="link-strong">
-                      {invoice.id}
+                      Invoice #{invoice.invoiceNumber}
                     </Link>
                     <small>
-                      Client: {getClientName(invoice.clientId)} • Total{' '}
-                      {formatCurrency(invoice.total)}
+                      {invoice.client.name} • Total {formatCurrency(invoice.total)}
                     </small>
                   </div>
                   <StatusBadge type="invoice" status={invoice.status} />
@@ -220,22 +197,20 @@ export const DashboardPage = () => {
               Open settings
             </Link>
           </div>
-          {visibleActivities.length === 0 ? (
+          {activities.length === 0 ? (
             <EmptyState
               title="No activity yet"
-              message="Project and invoice changes will appear here once work starts moving."
+              message="Project, billing, and invoice activity will appear here as the workspace evolves."
             />
           ) : (
             <ul className="list">
-              {visibleActivities.slice(0, 5).map((activity) => (
+              {activities.slice(0, 5).map((activity) => (
                 <li key={activity.id} className="list-item">
                   <div>
-                    <strong>{activity.subjectName}</strong>
-                    <small>
-                      {activity.actorName} • {activity.description}
-                    </small>
+                    <strong>{activity.message}</strong>
+                    <small>{activity.actor?.fullName ?? 'System'}</small>
                   </div>
-                  <small className="muted">{formatDateTime(activity.timestamp)}</small>
+                  <small className="muted">{formatDateTime(activity.createdAt)}</small>
                 </li>
               ))}
             </ul>

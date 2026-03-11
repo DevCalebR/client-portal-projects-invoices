@@ -1,6 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { appConfig } from '../config/env'
-import { clearSession } from '../data/storage'
 import { logAppError } from '../utils/logger'
 
 interface AppErrorBoundaryProps {
@@ -32,8 +31,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 
   private handleResetSession = () => {
-    clearSession()
-    window.location.assign('/login')
+    window.location.assign('/sign-in')
   }
 
   public render() {
@@ -63,4 +61,3 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     return this.props.children
   }
 }
-

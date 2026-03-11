@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  ADMIN
+  MANAGER
+  CLIENT
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum BillingPlan {
+  STARTER
+  PROFESSIONAL
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  LEAD
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  ON_HOLD
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  OPEN
+  PAID
+  PARTIALLY_PAID
+  VOID
+  OVERDUE
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  INVOICE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELED
+}
+
+enum ActivitySubjectType {
+  PROJECT
+  INVOICE
+  PAYMENT
+  CLIENT
+  SYSTEM
+}
+
+enum NotificationType {
+  INVOICE_CREATED
+  INVOICE_PAID
+  PROJECT_UPDATED
+  TEAM_INVITE
+  SYSTEM
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  clerkUserId        String               @unique
+  email              String               @unique
+  firstName          String?
+  lastName           String?
+  fullName           String
+  avatarUrl          String?
+  ownedOrganizations Organization[]       @relation("OrganizationOwner")
+  memberships        OrganizationMember[]
+  invitedMembers     OrganizationMember[] @relation("MemberInviter")
+  createdProjects    Project[]            @relation("ProjectCreatedBy")
+  updatedProjects    Project[]            @relation("ProjectUpdatedBy")
+  createdInvoices    Invoice[]            @relation("InvoiceCreatedBy")
+  updatedInvoices    Invoice[]            @relation("InvoiceUpdatedBy")
+  activityEvents     ActivityEvent[]      @relation("ActivityActor")
+  notifications      Notification[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model Organization {
+  id                       String               @id @default(cuid())
+  clerkOrganizationId      String               @unique
+  name                     String
+  slug                     String               @unique
+  ownerUserId              String
+  plan                     BillingPlan          @default(STARTER)
+  subscriptionStatus       SubscriptionStatus   @default(INACTIVE)
+  stripeCustomerId         String?
+  stripeSubscriptionId     String?
+  stripeCurrentPeriodEnd   DateTime?
+  billingEmail             String?
+  owner                    User                 @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  members                  OrganizationMember[]
+  clients                  Client[]
+  projects                 Project[]
+  invoices                 Invoice[]
+  payments                 Payment[]
+  activityEvents           ActivityEvent[]
+  notifications            Notification[]
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+}
+
+model OrganizationMember {
+  id               String           @id @default(cuid())
+  organizationId   String
+  userId           String
+  clerkMembershipId String?         @unique
+  role             OrganizationRole
+  status           MembershipStatus @default(ACTIVE)
+  invitedEmail     String?
+  invitedByUserId  String?
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy        User?            @relation("MemberInviter", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  clientProfile    Client?
+  notifications    Notification[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, role, status])
+}
+
+model Client {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  memberId            String?        @unique
+  name                String
+  company             String?
+  email               String
+  billingEmail        String?
+  status              ClientStatus   @default(ACTIVE)
+  notes               String?
+  portalAccessEnabled Boolean        @default(true)
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  member              OrganizationMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  projects            Project[]
+  invoices            Invoice[]
+  activityEvents      ActivityEvent[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+}
+
+model Project {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  description    String?
+  status         ProjectStatus  @default(PLANNING)
+  dueDate        DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdById    String
+  updatedById    String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy      User           @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy      User           @relation("ProjectUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  invoices       Invoice[]
+  activityEvents ActivityEvent[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([organizationId, clientId, status])
+  @@index([organizationId, dueDate])
+}
+
+model Invoice {
+  id                     String         @id @default(cuid())
+  organizationId         String
+  clientId               String
+  projectId              String?
+  invoiceNumber          Int
+  status                 InvoiceStatus  @default(DRAFT)
+  issueDate              DateTime
+  dueDate                DateTime
+  subtotal               Decimal        @db.Decimal(12, 2)
+  taxAmount              Decimal        @default(0) @db.Decimal(12, 2)
+  total                  Decimal        @db.Decimal(12, 2)
+  amountPaid             Decimal        @default(0) @db.Decimal(12, 2)
+  balanceDue             Decimal        @db.Decimal(12, 2)
+  currency               String         @default("USD")
+  notes                  String?
+  stripeCheckoutSessionId String?
+  stripePaymentIntentId  String?
+  stripeInvoiceId        String?
+  stripeHostedUrl        String?
+  createdById            String
+  updatedById            String
+  organization           Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client                 Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  project                Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy              User           @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy              User           @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  items                  InvoiceItem[]
+  payments               Payment[]
+  activityEvents         ActivityEvent[]
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, clientId, status])
+  @@index([organizationId, dueDate])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([invoiceId, sortOrder])
+}
+
+model Payment {
+  id                      String        @id @default(cuid())
+  organizationId          String
+  invoiceId               String?
+  type                    PaymentType
+  status                  PaymentStatus @default(PENDING)
+  amount                  Decimal       @db.Decimal(12, 2)
+  currency                String        @default("USD")
+  provider                String        @default("stripe")
+  stripeCheckoutSessionId String?
+  stripePaymentIntentId   String?
+  stripeSubscriptionId    String?
+  stripeCustomerId        String?
+  paidAt                  DateTime?
+  failureMessage          String?
+  organization            Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice                 Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  activityEvents          ActivityEvent[]
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@index([organizationId, type, status])
+}
+
+model ActivityEvent {
+  id             String              @id @default(cuid())
+  organizationId String
+  actorId        String?
+  subjectType    ActivitySubjectType
+  subjectId      String
+  message        String
+  metadata       Json?
+  projectId      String?
+  invoiceId      String?
+  paymentId      String?
+  clientId       String?
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor          User?               @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  invoice        Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payment        Payment?            @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  client         Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdAt      DateTime            @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, subjectType])
+}
+
+model Notification {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  memberId       String?
+  type           NotificationType
+  title          String
+  message        String
+  link           String?
+  metadata       Json?
+  readAt         DateTime?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member         OrganizationMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, createdAt])
+}

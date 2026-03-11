@@ -1,3 +1,5 @@
+import * as Sentry from '@sentry/react'
+
 type LogMeta = Record<string, unknown>
 
 const normalizeError = (error: unknown) => {
@@ -15,6 +17,10 @@ const normalizeError = (error: unknown) => {
 }
 
 export const logAppError = (error: unknown, meta: LogMeta = {}) => {
+  Sentry.captureException(error, {
+    extra: meta,
+  })
+
   console.error('[app:error]', {
     ...meta,
     error: normalizeError(error),
@@ -33,4 +39,3 @@ export const logAppEvent = (event: string, meta: LogMeta = {}) => {
     timestamp: new Date().toISOString(),
   })
 }
-

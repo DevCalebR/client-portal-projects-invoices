@@ -4,34 +4,31 @@ import { useFieldArray, useForm, useWatch, type SubmitHandler } from 'react-hook
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { Notice } from '../components/Notice'
-import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { useFeedback } from '../context/FeedbackContext'
 import {
   INVOICE_STATUS_LABELS,
   INVOICE_STATUS_OPTIONS,
   type InvoiceInput,
-  isAdminUser,
 } from '../types/entities'
-import { calculateInvoiceSubtotal, formatCurrency, getInputDate } from '../utils/format'
+import { calculateInvoiceSubtotal, formatCurrency, getInputDate, toIsoDate } from '../utils/format'
 import { logAppError } from '../utils/logger'
 
 const lineItemSchema = z.object({
-  id: z.string().optional(),
-  description: z.string().trim().min(3, 'Describe the work item.'),
+  description: z.string().trim().min(3, 'Describe the line item.'),
   quantity: z.number().min(1, 'Quantity must be at least 1.'),
-  rate: z.number().min(0.01, 'Rate must be greater than 0.'),
+  unitPrice: z.number().min(0.01, 'Unit price must be greater than 0.'),
 })
 
 const invoiceSchema = z
   .object({
-    projectId: z.string().min(1, 'Choose a project.'),
     clientId: z.string().min(1, 'Choose a client.'),
+    projectId: z.string().optional(),
     status: z.enum(INVOICE_STATUS_OPTIONS),
     issueDate: z.string().min(1, 'Issue date is required.'),
     dueDate: z.string().min(1, 'Due date is required.'),
     notes: z.string().trim().max(1000, 'Keep notes under 1000 characters.').optional(),
-    lineItems: z.array(lineItemSchema).min(1, 'Add at least one line item.'),
+    items: z.array(lineItemSchema).min(1, 'Add at least one line item.'),
   })
   .superRefine((data, context) => {
     const issue = Date.parse(data.issueDate)
@@ -67,39 +64,34 @@ const invoiceSchema = z
 type InvoiceFormValues = z.infer<typeof invoiceSchema>
 
 export const InvoiceFormPage = () => {
-  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const { notify } = useFeedback()
   const [searchParams] = useSearchParams()
   const queryProjectId = searchParams.get('projectId')
-  const { projects, createInvoice, updateInvoice, getInvoice, getProject, isLoading } = useData()
+  const { clients, projects, createInvoice, updateInvoice, getInvoice, isLoading } = useData()
 
   const currentInvoice = isEdit && id ? getInvoice(id) : null
   const prefillProject = queryProjectId ? projects.find((project) => project.id === queryProjectId) : null
-
   const initialDate = getInputDate(new Date().toISOString())
-  const activeProjectOptions = projects
 
   const initialValues = useMemo<InvoiceFormValues>(
     () => ({
-      projectId: currentInvoice?.projectId ?? prefillProject?.id ?? activeProjectOptions[0]?.id ?? '',
-      clientId:
-        currentInvoice?.clientId ?? prefillProject?.clientId ?? activeProjectOptions[0]?.clientId ?? '',
-      status: currentInvoice?.status ?? 'draft',
+      clientId: currentInvoice?.client.id ?? prefillProject?.client.id ?? clients[0]?.id ?? '',
+      projectId: currentInvoice?.project?.id ?? prefillProject?.id ?? '',
+      status: currentInvoice?.status ?? 'DRAFT',
       issueDate: currentInvoice ? getInputDate(currentInvoice.issueDate) : initialDate,
       dueDate: currentInvoice ? getInputDate(currentInvoice.dueDate) : initialDate,
       notes: currentInvoice?.notes ?? '',
-      lineItems:
-        currentInvoice?.lineItems.map((lineItem) => ({
-          id: lineItem.id,
-          description: lineItem.description,
-          quantity: lineItem.quantity,
-          rate: lineItem.rate,
-        })) ?? [{ id: undefined, description: '', quantity: 1, rate: 0.01 }],
+      items:
+        currentInvoice?.items.map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })) ?? [{ description: '', quantity: 1, unitPrice: 0.01 }],
     }),
-    [activeProjectOptions, currentInvoice, initialDate, prefillProject?.clientId, prefillProject?.id],
+    [clients, currentInvoice, initialDate, prefillProject],
   )
 
   const {
@@ -122,70 +114,70 @@ export const InvoiceFormPage = () => {
     }
   }, [initialValues, isLoading, reset])
 
-  const projectId = useWatch({ control, name: 'projectId' })
-  const lineItems = useWatch({ control, name: 'lineItems' })
-  const selectedProject = projectId ? getProject(projectId) : null
-  const selectedClient = selectedProject
-    ? users.find((person) => person.id === selectedProject.clientId)
-    : null
+  const clientId = useWatch({ control, name: 'clientId' })
+  const items = useWatch({ control, name: 'items' })
+  const clientProjects = useMemo(
+    () => projects.filter((project) => project.client.id === clientId),
+    [projects, clientId],
+  )
 
-  const subtotal = useMemo(() => calculateInvoiceSubtotal(lineItems ?? []), [lineItems])
+  useEffect(() => {
+    if (!clientId) {
+      return
+    }
+
+    if (!clientProjects.some((project) => project.id === initialValues.projectId)) {
+      setValue('projectId', '')
+    }
+  }, [clientId, clientProjects, initialValues.projectId, setValue])
+
+  const subtotal = useMemo(
+    () =>
+      calculateInvoiceSubtotal(
+        (items ?? []).map((item) => ({
+          quantity: item.quantity,
+          rate: item.unitPrice,
+        })),
+      ),
+    [items],
+  )
 
   const { fields, append, remove } = useFieldArray({
     control,
-    name: 'lineItems',
+    name: 'items',
   })
 
-  useEffect(() => {
-    if (!projectId) {
-      return
-    }
-
-    const project = getProject(projectId)
-    if (!project) {
-      return
-    }
-
-    setValue('clientId', project.clientId)
-  }, [getProject, projectId, setValue])
-
-  const onSubmit: SubmitHandler<InvoiceFormValues> = (values) => {
-    if (!user || !isAdminUser(user)) {
-      navigate('/invoices', { replace: true })
-      return
-    }
-
+  const onSubmit: SubmitHandler<InvoiceFormValues> = async (values) => {
     const payload: InvoiceInput = {
-      projectId: values.projectId,
       clientId: values.clientId,
+      projectId: values.projectId || null,
       status: values.status,
-      issueDate: values.issueDate,
-      dueDate: values.dueDate,
+      issueDate: toIsoDate(values.issueDate),
+      dueDate: toIsoDate(values.dueDate),
       notes: values.notes ?? '',
-      lineItems: values.lineItems.map((lineItem) => ({
-        id: lineItem.id,
-        description: lineItem.description,
-        quantity: lineItem.quantity,
-        rate: lineItem.rate,
+      items: values.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
       })),
     }
 
     try {
       if (isEdit && id) {
-        updateInvoice(id, payload)
+        const updated = await updateInvoice(id, payload)
         notify({
           title: 'Invoice updated',
-          message: 'The invoice was saved successfully.',
+          message: `Invoice #${updated.invoiceNumber} was saved successfully.`,
           tone: 'success',
         })
         navigate(`/invoices/${id}`)
         return
       }
 
-      const created = createInvoice(payload)
+      const created = await createInvoice(payload)
       notify({
         title: 'Invoice created',
-        message: 'The invoice is ready for client review.',
+        message: `Invoice #${created.invoiceNumber} is ready for review.`,
         tone: 'success',
       })
       navigate(`/invoices/${created.id}`)
@@ -196,10 +188,6 @@ export const InvoiceFormPage = () => {
         message: error instanceof Error ? error.message : 'Unable to save this invoice.',
       })
     }
-  }
-
-  if (!user || !isAdminUser(user)) {
-    return null
   }
 
   if (isLoading) {
@@ -222,15 +210,15 @@ export const InvoiceFormPage = () => {
     )
   }
 
-  if (activeProjectOptions.length === 0) {
+  if (clients.length === 0) {
     return (
       <section className="card">
-        <h1>Can't create an invoice yet</h1>
+        <h1>No clients available</h1>
         <p className="muted">
-          No projects are available yet. Create a project first, then return to build an invoice.
+          Add a client record in Settings before creating invoices.
         </p>
-        <Link className="btn btn--primary" to="/projects/new">
-          Create a project
+        <Link className="btn btn--primary" to="/settings">
+          Open settings
         </Link>
       </section>
     )
@@ -250,31 +238,27 @@ export const InvoiceFormPage = () => {
         ) : null}
 
         <label>
+          Client
+          <select {...register('clientId')} disabled={isSubmitting}>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {`${client.name}${client.company ? ` • ${client.company}` : ''}`}
+              </option>
+            ))}
+          </select>
+          {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
+        </label>
+
+        <label>
           Project
           <select {...register('projectId')} disabled={isSubmitting}>
-            {activeProjectOptions.length === 0 ? <option value="">No projects available</option> : null}
-            {activeProjectOptions.map((project) => (
+            <option value="">Unlinked invoice</option>
+            {clientProjects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
             ))}
           </select>
-          {errors.projectId ? <p className="error">{errors.projectId.message}</p> : null}
-        </label>
-
-        <input type="hidden" {...register('clientId')} />
-        <label>
-          Assigned client
-          <input
-            value={
-              selectedClient
-                ? `${selectedClient.name}${selectedClient.company ? ` • ${selectedClient.company}` : ''}`
-                : 'Select a project to assign a client'
-            }
-            readOnly
-            disabled
-          />
-          {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
         </label>
 
         <label>
@@ -314,7 +298,7 @@ export const InvoiceFormPage = () => {
             <button
               className="btn btn--ghost"
               type="button"
-              onClick={() => append({ description: '', quantity: 1, rate: 0.01 })}
+              onClick={() => append({ description: '', quantity: 1, unitPrice: 0.01 })}
               disabled={isSubmitting}
             >
               Add line
@@ -326,12 +310,12 @@ export const InvoiceFormPage = () => {
               <label>
                 Description
                 <input
-                  {...register(`lineItems.${index}.description` as const)}
-                  placeholder="Design review"
+                  {...register(`items.${index}.description` as const)}
+                  placeholder="Dashboard implementation milestone"
                   disabled={isSubmitting}
                 />
-                {errors.lineItems?.[index]?.description ? (
-                  <p className="error">{errors.lineItems[index]?.description?.message}</p>
+                {errors.items?.[index]?.description ? (
+                  <p className="error">{errors.items[index]?.description?.message}</p>
                 ) : null}
               </label>
               <label>
@@ -341,27 +325,27 @@ export const InvoiceFormPage = () => {
                   step="1"
                   min="1"
                   disabled={isSubmitting}
-                  {...register(`lineItems.${index}.quantity` as const, {
+                  {...register(`items.${index}.quantity` as const, {
                     valueAsNumber: true,
                   })}
                 />
-                {errors.lineItems?.[index]?.quantity ? (
-                  <p className="error">{errors.lineItems[index]?.quantity?.message}</p>
+                {errors.items?.[index]?.quantity ? (
+                  <p className="error">{errors.items[index]?.quantity?.message}</p>
                 ) : null}
               </label>
               <label>
-                Rate
+                Unit price
                 <input
                   type="number"
                   step="0.01"
                   min="0.01"
                   disabled={isSubmitting}
-                  {...register(`lineItems.${index}.rate` as const, {
+                  {...register(`items.${index}.unitPrice` as const, {
                     valueAsNumber: true,
                   })}
                 />
-                {errors.lineItems?.[index]?.rate ? (
-                  <p className="error">{errors.lineItems[index]?.rate?.message}</p>
+                {errors.items?.[index]?.unitPrice ? (
+                  <p className="error">{errors.items[index]?.unitPrice?.message}</p>
                 ) : null}
               </label>
               <button
@@ -375,7 +359,7 @@ export const InvoiceFormPage = () => {
             </div>
           ))}
 
-          {errors.lineItems ? <p className="error">{errors.lineItems.message as string}</p> : null}
+          {errors.items ? <p className="error">{errors.items.message as string}</p> : null}
 
           <p className="totals-preview">Subtotal preview: {formatCurrency(subtotal)}</p>
         </section>

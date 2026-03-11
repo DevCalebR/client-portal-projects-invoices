@@ -1,59 +1,216 @@
-# Client Portal — Projects & Invoices
+# Client Portal SaaS
 
-Client Portal is a React + TypeScript client portal SPA for managing projects and invoices across admin and client roles. This repository has been audited and hardened for deployment as a static demo application, with stronger validation, session handling, error boundaries, notifications, activity history, and cleaner deployment/docs coverage.
+Client Portal is now a real multi-tenant SaaS foundation built on the existing React + Vite frontend. The app keeps the current portal UI, but data now flows through a backend API, Prisma/PostgreSQL persistence, Clerk authentication, Stripe billing, Resend email delivery, and Sentry monitoring.
 
-## Feature list
+## Architecture overview
 
-- Admin dashboard with project/invoice overview, quick actions, and recent activity
-- Client dashboard scoped to the signed-in client
-- Role-based route protection and client/admin navigation
-- Project create/edit/delete workflows
-- Invoice create/edit/delete workflows with line item calculations
-- Session persistence with expiration and cross-tab sync
-- Runtime environment configuration via Vite env vars
-- Activity history tracking for project/invoice mutations
-- Empty states, inline form errors, destructive-action confirmation, and success/error notifications
+- Frontend: React 19 + Vite + TypeScript SPA with route-level code splitting.
+- API: Express application under [`server/`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/server) mounted locally via `tsx` and deployed on Vercel through [`api/index.ts`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/api/index.ts).
+- Database: PostgreSQL with Prisma schema/migrations under [`prisma/`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/prisma).
+- Authentication: Clerk user auth + Clerk organizations, synced into internal `User`, `Organization`, and `OrganizationMember` tables.
+- Billing: Stripe Checkout for subscriptions and invoice payments, plus Stripe customer portal and webhook handling.
+- Email: Resend transactional email service for invoices, payments, project updates, and team invitations.
+- Monitoring: Sentry for frontend runtime errors and backend API exceptions.
 
-## Tech stack
+## Multi-tenant model
 
-- Vite
-- React 19
-- TypeScript
-- React Router 7
-- React Hook Form
-- Zod
-- localStorage-backed demo persistence
+Every core record is organization-scoped. The database enforces tenant boundaries through `organizationId` relations across:
 
-## Architecture summary
+- `Organization`
+- `OrganizationMember`
+- `Client`
+- `Project`
+- `Invoice`
+- `InvoiceItem`
+- `Payment`
+- `ActivityEvent`
+- `Notification`
 
-- `src/context/AuthContext.tsx`: local auth/session handling, hashed seeded credentials, session timeout
-- `src/context/DataContext.tsx`: project/invoice/activity state, persistence, mutation validation
-- `src/data/seed.ts`: seeded demo users/projects/invoices/activity
-- `src/data/storage.ts`: localStorage helpers with schema validation support
-- `src/config/env.ts`: runtime env parsing and defaults
-- `src/components/AppErrorBoundary.tsx`: global error fallback
-- `src/context/FeedbackContext.tsx`: transient notification layer
+Supported roles:
 
-There is no backend, database, or API layer in this repository. This version is production-hardened for a static demo deployment, not for storing real customer data.
+- `ADMIN`: full workspace access, billing, invites, destructive actions
+- `MANAGER`: internal operational access without subscription admin privileges
+- `CLIENT`: scoped access to their own client profile, projects, invoices, and invoice payments
 
-## Demo accounts
+## API surface
 
-Demo helpers are available only when `VITE_ENABLE_DEMO_MODE=true`.
+Auth
 
-- Admin: `admin@example.com` / `admin123`
-- Client: `client@example.com` / `client123`
-- Additional seeded client: `noah@lakeside.co` / `client456`
+- `GET /api/auth/session`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `POST /api/organizations/invitations`
+
+Projects
+
+- `GET /api/projects`
+- `POST /api/projects`
+- `GET /api/projects/:id`
+- `PATCH /api/projects/:id`
+- `DELETE /api/projects/:id`
+
+Invoices
+
+- `GET /api/invoices`
+- `POST /api/invoices`
+- `GET /api/invoices/:id`
+- `PATCH /api/invoices/:id`
+- `DELETE /api/invoices/:id`
+
+Clients
+
+- `GET /api/clients`
+- `POST /api/clients`
+- `PATCH /api/clients/:id`
+
+Payments
+
+- `POST /api/payments/create-checkout`
+- `POST /api/payments/customer-portal`
+- `POST /api/payments/webhook`
+
+Notifications and activity
+
+- `GET /api/notifications`
+- `PATCH /api/notifications/:id/read`
+- `GET /api/activity`
+
+All API routes enforce authentication. Organization scoping and role checks are enforced in the server layer, not just in the UI.
+
+## Project structure
+
+```text
+src/                 React frontend
+server/              Express API, auth, billing, email, monitoring
+api/index.ts         Vercel serverless entrypoint
+prisma/              Prisma schema, migration, seed script
+vercel.json          SPA + API rewrite rules for Vercel
+vite.config.ts       Frontend build and local API proxy configuration
+```
 
 ## Local development
 
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 15+
+- A Clerk application with organizations enabled
+- A Stripe account with three recurring prices
+- A Resend account and verified sender
+- A Sentry project for browser and server DSNs
+
+### Setup
+
+1. Install dependencies.
+
 ```bash
 npm install
+```
+
+2. Copy the env template and fill in the required values.
+
+```bash
+cp .env.example .env
+```
+
+3. Create the PostgreSQL database referenced by `DATABASE_URL`.
+
+4. Apply the initial migration.
+
+```bash
+npm run db:deploy
+```
+
+For local iterative development you can also use:
+
+```bash
+npm run db:migrate
+```
+
+5. Seed development data.
+
+```bash
+npm run db:seed
+```
+
+6. Start the full stack locally.
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:5173/login](http://localhost:5173/login).
+This runs:
 
-## Verification scripts
+- the Express API on `http://127.0.0.1:8787`
+- the Vite frontend on `http://localhost:5173`
+
+The frontend proxies `/api` and `/health` to the local API automatically.
+
+## Clerk configuration
+
+Configure Clerk with:
+
+- User authentication enabled
+- Organizations enabled
+- Organization roles matching:
+  - `org:admin`
+  - `org:manager`
+  - `org:client`
+- Redirects pointing to:
+  - sign in: `/sign-in`
+  - sign up: `/sign-up`
+  - post sign-up onboarding: `/onboarding`
+
+The backend syncs Clerk users and organizations into the Prisma models on authenticated requests.
+
+## Stripe configuration
+
+Create three recurring prices in Stripe:
+
+- Starter
+- Professional
+- Agency
+
+Expose the corresponding IDs through:
+
+- `STRIPE_PRICE_STARTER`
+- `STRIPE_PRICE_PROFESSIONAL`
+- `STRIPE_PRICE_AGENCY`
+
+### Local webhook forwarding
+
+Use the Stripe CLI during local development:
+
+```bash
+stripe listen --forward-to http://127.0.0.1:8787/api/payments/webhook
+```
+
+Copy the resulting signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+## Email workflows
+
+Resend is used for:
+
+- new invoice notifications
+- invoice paid confirmations
+- project update notifications
+- team invitation emails
+- plan change notifications
+
+Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` with a verified sender identity.
+
+## Monitoring
+
+Set:
+
+- `SENTRY_DSN` for backend/API capture
+- `VITE_SENTRY_DSN` for browser/runtime capture
+
+Frontend Sentry initializes in [`src/main.tsx`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/src/main.tsx). Backend Sentry initializes in [`server/lib/sentry.ts`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/server/lib/sentry.ts).
+
+## Verification
+
+Run before deployment:
 
 ```bash
 npm run lint
@@ -61,68 +218,46 @@ npm run typecheck
 npm run build
 ```
 
-## Environment variables
+## Deployment on Vercel
 
-Copy `.env.example` to `.env` and set:
+### What Vercel serves
 
-- `VITE_APP_NAME`
-- `VITE_APP_SUBTITLE`
-- `VITE_SUPPORT_EMAIL`
-- `VITE_ENABLE_DEMO_MODE`
-- `VITE_SESSION_TIMEOUT_MINUTES`
+- Static frontend from `dist/`
+- Express API via `api/index.ts`
+- Rewrites defined in [`vercel.json`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/vercel.json)
 
-All variables are public Vite variables and are safe to expose to the browser. Do not place secrets in `VITE_*` variables.
+### Deployment steps
+
+1. Import the repository into Vercel.
+2. Set the build command to `npm run build` if Vercel does not infer it.
+3. Set the output directory to `dist`.
+4. Add every environment variable from [`.env.example`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/.env.example).
+5. Point Stripe webhooks at `https://YOUR_DOMAIN/api/payments/webhook`.
+6. Set `APP_URL` and `VITE_APP_URL` to the production domain.
+7. Run `npm run db:deploy` against the production database during deployment or through your release pipeline.
 
 ## Production setup guide
 
-### Static deployment
+### Required manual configuration
 
-This app deploys as a static SPA.
+1. Provision PostgreSQL and set `DATABASE_URL`.
+2. Configure Clerk keys, organization roles, and redirects.
+3. Configure Stripe products, prices, and webhook endpoint.
+4. Configure Resend sender verification and API key.
+5. Configure Sentry DSNs.
+6. Add all environment variables in Vercel.
 
-- Netlify uses [netlify.toml](./netlify.toml) for SPA redirects.
-- Vercel uses [vercel.json](./vercel.json) for SPA rewrites.
-- Build output is written to `dist/`.
+### Optional development seed linkage
 
-### What you must configure
+The seed file accepts Clerk IDs through:
 
-1. Set the environment variables from `.env.example` in your hosting platform.
-2. Decide whether demo mode should remain enabled.
-3. Set a real support email for branded deployments.
-4. Choose a session timeout policy.
+- `DEV_SEED_ADMIN_CLERK_USER_ID`
+- `DEV_SEED_MANAGER_CLERK_USER_ID`
+- `DEV_SEED_CLIENT_CLERK_USER_ID`
+- `DEV_SEED_CLERK_ORG_ID`
 
-### What this repository does not yet provide
+These are useful if you want the seed data to line up with real Clerk test entities.
 
-For a real SaaS rollout, you still need:
+## Documentation
 
-1. Server-backed authentication
-2. Database-backed persistence
-3. Backend authorization enforcement
-4. Real audit logging/monitoring
-5. Payment/email/provider integrations if required
-
-## Deployment
-
-### Netlify
-
-1. Connect the repo.
-2. Set build command to `npm run build`.
-3. Set publish directory to `dist`.
-4. Add the environment variables from `.env.example`.
-
-### Vercel
-
-1. Import the repo.
-2. Set build command to `npm run build` if Vercel does not infer it.
-3. Set output directory to `dist`.
-4. Add the environment variables from `.env.example`.
-
-## Audit documentation
-
-- Full audit report: [docs/AUDIT_REPORT.md](./docs/AUDIT_REPORT.md)
-
-## Recommended next improvements
-
-1. Move auth and data to a server-backed API.
-2. Add automated end-to-end tests for login, CRUD, and authorization.
-3. Add remote error monitoring and analytics.
-4. Add payment delivery, PDF generation, and notification providers if invoices become real.
+- Legacy audit and upgrade notes: [docs/AUDIT_REPORT.md](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/docs/AUDIT_REPORT.md)

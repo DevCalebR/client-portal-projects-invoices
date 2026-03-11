@@ -5,12 +5,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { useFeedback } from '../context/FeedbackContext'
-import {
-  INVOICE_STATUS_LABELS,
-  INVOICE_STATUS_OPTIONS,
-  isAdminUser,
-  type InvoiceStatus,
-} from '../types/entities'
+import { INVOICE_STATUS_LABELS, INVOICE_STATUS_OPTIONS, isAdminRole, isInternalRole, type InvoiceStatus } from '../types/entities'
 import { logAppError } from '../utils/logger'
 import { formatCurrency, formatDate } from '../utils/format'
 
@@ -19,42 +14,26 @@ const normalizeStatus = (value: string): InvoiceStatus | 'all' =>
 
 export const InvoicesPage = () => {
   const navigate = useNavigate()
-  const { user, users } = useAuth()
-  const { invoices, isLoading, projects, deleteInvoice } = useData()
+  const { membership } = useAuth()
+  const { invoices, isLoading, deleteInvoice } = useData()
   const { notify } = useFeedback()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all')
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
-  const clientNameById = useMemo(
-    () => new Map(users.map((person) => [person.id, person.name])),
-    [users],
-  )
-
-  const visibleInvoices = useMemo(() => {
-    const scope = isAdminUser(user)
-      ? invoices
-      : invoices.filter((invoice) => invoice.clientId === user?.id)
-
-    return scope.map((invoice) => ({
-      ...invoice,
-      projectName:
-        projects.find((project) => project.id === invoice.projectId)?.name ?? 'Unknown project',
-      clientName: clientNameById.get(invoice.clientId) ?? invoice.clientId,
-    }))
-  }, [invoices, projects, user, clientNameById])
+  const canCreate = isInternalRole(membership?.role)
+  const canDelete = isAdminRole(membership?.role)
 
   const filtered = useMemo(
     () =>
-      visibleInvoices
-        .filter(
-          (invoice) =>
-            invoice.projectName.toLowerCase().includes(search.toLowerCase()) ||
-            invoice.clientName.toLowerCase().includes(search.toLowerCase()) ||
-            invoice.id.toLowerCase().includes(search.toLowerCase()),
-        )
+      invoices
+        .filter((invoice) => {
+          const lowered = search.toLowerCase()
+          const haystack = `${invoice.invoiceNumber} ${invoice.client.name} ${invoice.project?.name ?? ''}`.toLowerCase()
+          return haystack.includes(lowered)
+        })
         .filter((invoice) => (statusFilter === 'all' ? true : invoice.status === statusFilter)),
-    [search, statusFilter, visibleInvoices],
+    [search, statusFilter, invoices],
   )
 
   const clearFilters = () => {
@@ -62,8 +41,8 @@ export const InvoicesPage = () => {
     setStatusFilter('all')
   }
 
-  const handleDelete = (invoiceId: string) => {
-    const shouldDelete = window.confirm(`Delete invoice ${invoiceId}? This cannot be undone.`)
+  const handleDelete = async (invoiceId: string, invoiceNumber: number) => {
+    const shouldDelete = window.confirm(`Delete invoice #${invoiceNumber}? This cannot be undone.`)
 
     if (!shouldDelete) {
       return
@@ -71,10 +50,10 @@ export const InvoicesPage = () => {
 
     try {
       setPendingDeleteId(invoiceId)
-      deleteInvoice(invoiceId)
+      await deleteInvoice(invoiceId)
       notify({
         title: 'Invoice deleted',
-        message: `${invoiceId} was removed from the ledger.`,
+        message: `Invoice #${invoiceNumber} was removed.`,
         tone: 'success',
       })
     } catch (error) {
@@ -89,18 +68,14 @@ export const InvoicesPage = () => {
     }
   }
 
-  if (!user) {
-    return null
-  }
-
   return (
     <div className="page-stack">
       <div className="page-head page-head--actions">
         <div>
-          <h1>{isAdminUser(user) ? 'All Invoices' : 'My Invoices'}</h1>
+          <h1>{canCreate ? 'Invoices' : 'My Invoices'}</h1>
           <p>{filtered.length} invoice(s) found</p>
         </div>
-        {isAdminUser(user) ? (
+        {canCreate ? (
           <button className="btn btn--primary" onClick={() => navigate('/invoices/new')} type="button">
             Add invoice
           </button>
@@ -109,7 +84,7 @@ export const InvoicesPage = () => {
 
       <section className="card filter-bar">
         <input
-          placeholder="Search by invoice id, project, or client"
+          placeholder="Search by invoice number, client, or project"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -135,12 +110,12 @@ export const InvoicesPage = () => {
         <EmptyState
           title="No invoices found"
           message={
-            isAdminUser(user)
+            canCreate
               ? 'Try adjusting search and status filters or create a new invoice.'
-              : 'No invoices are assigned to your account at this time.'
+              : 'No invoices are currently assigned to your workspace account.'
           }
           action={
-            isAdminUser(user) ? (
+            canCreate ? (
               <Link className="btn btn--primary" to="/invoices/new">
                 Create invoice
               </Link>
@@ -160,7 +135,7 @@ export const InvoicesPage = () => {
                   <th>Client</th>
                   <th>Status</th>
                   <th>Due</th>
-                  <th>Total</th>
+                  <th>Balance due</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -168,29 +143,27 @@ export const InvoicesPage = () => {
                 {filtered.map((invoice) => (
                   <tr key={invoice.id}>
                     <td>
-                      <Link to={`/invoices/${invoice.id}`}>{invoice.id}</Link>
+                      <Link to={`/invoices/${invoice.id}`}>#{invoice.invoiceNumber}</Link>
                     </td>
-                    <td>{invoice.projectName}</td>
-                    <td>{invoice.clientName}</td>
+                    <td>{invoice.project?.name ?? 'Unlinked'}</td>
+                    <td>{invoice.client.name}</td>
                     <td>
                       <StatusBadge type="invoice" status={invoice.status} />
                     </td>
                     <td>{formatDate(invoice.dueDate)}</td>
-                    <td>{formatCurrency(invoice.total)}</td>
+                    <td>{formatCurrency(invoice.balanceDue)}</td>
                     <td className="actions">
                       <Link to={`/invoices/${invoice.id}`}>View</Link>
-                      {isAdminUser(user) ? (
-                        <>
-                          <Link to={`/invoices/${invoice.id}/edit`}>Edit</Link>
-                          <button
-                            className="btn btn--danger btn--sm"
-                            onClick={() => handleDelete(invoice.id)}
-                            type="button"
-                            disabled={pendingDeleteId === invoice.id}
-                          >
-                            {pendingDeleteId === invoice.id ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </>
+                      {canCreate ? <Link to={`/invoices/${invoice.id}/edit`}>Edit</Link> : null}
+                      {canDelete ? (
+                        <button
+                          className="btn btn--danger btn--sm"
+                          onClick={() => void handleDelete(invoice.id, invoice.invoiceNumber)}
+                          type="button"
+                          disabled={pendingDeleteId === invoice.id}
+                        >
+                          {pendingDeleteId === invoice.id ? 'Deleting...' : 'Delete'}
+                        </button>
                       ) : null}
                     </td>
                   </tr>

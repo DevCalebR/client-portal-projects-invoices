@@ -1,36 +1,50 @@
+import { OrganizationSwitcher, UserButton } from '@clerk/react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { appConfig } from '../config/env'
 import { useAuth } from '../context/AuthContext'
+import { useData } from '../context/DataContext'
+import { BILLING_PLAN_LABELS, isInternalRole } from '../types/entities'
 import { FeedbackViewport } from './FeedbackViewport'
-import { formatDateTime } from '../utils/format'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? 'link link--active' : 'link'
 
 const Header = () => {
-  const { user, logout, sessionExpiresAt } = useAuth()
+  const { user, membership, organization } = useAuth()
+  const { notifications } = useData()
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length
 
   return (
     <header className="site-header">
-      <Link className="brand" to="/dashboard">
-        {appConfig.appName}
-      </Link>
-      <p className="header-subtitle">{appConfig.appSubtitle}</p>
+      <div className="header-brand">
+        <Link className="brand" to="/dashboard">
+          {appConfig.appName}
+        </Link>
+        <p className="header-subtitle">{appConfig.appSubtitle}</p>
+      </div>
       <div className="spacer" />
       <div className="header-meta">
-        <strong>{user?.name}</strong>
-        <small>{sessionExpiresAt ? `Session ends ${formatDateTime(sessionExpiresAt)}` : 'Session active'}</small>
+        <strong>{organization?.name ?? user?.fullName}</strong>
+        <small>
+          {organization
+            ? `${BILLING_PLAN_LABELS[organization.plan]} plan • ${unreadCount} unread notification(s)`
+            : 'No organization selected'}
+        </small>
       </div>
-      <span className="pill">{user?.role.toUpperCase()}</span>
-      <button className="btn btn--ghost" onClick={logout} type="button">
-        Logout
-      </button>
+      <span className="pill">{membership?.role ?? 'USER'}</span>
+      <OrganizationSwitcher
+        hidePersonal
+        afterSelectOrganizationUrl="/dashboard"
+        afterCreateOrganizationUrl="/onboarding"
+      />
+      <UserButton />
     </header>
   )
 }
 
 export const AppLayout = () => {
-  const { user } = useAuth()
+  const { membership } = useAuth()
+  const isInternal = isInternalRole(membership?.role)
 
   return (
     <div className="shell">
@@ -53,9 +67,9 @@ export const AppLayout = () => {
               Settings
             </NavLink>
           </nav>
-          {user?.role === 'admin' && (
+          {isInternal ? (
             <section className="admin-shortcuts">
-              <h3>Admin shortcuts</h3>
+              <h3>Workspace actions</h3>
               <Link className="btn btn--primary btn--sm" to="/projects/new">
                 New project
               </Link>
@@ -63,7 +77,7 @@ export const AppLayout = () => {
                 New invoice
               </Link>
             </section>
-          )}
+          ) : null}
         </aside>
         <main className="content">
           <Outlet />
