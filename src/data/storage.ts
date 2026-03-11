@@ -1,9 +1,12 @@
+import { z, type ZodType } from 'zod'
+
 const STORAGE_PREFIX = 'cpp'
 
 export const STORAGE_KEYS = {
   users: `${STORAGE_PREFIX}:users:v1`,
   projects: `${STORAGE_PREFIX}:projects:v1`,
   invoices: `${STORAGE_PREFIX}:invoices:v1`,
+  activity: `${STORAGE_PREFIX}:activity:v1`,
   session: `${STORAGE_PREFIX}:session:v1`,
 } as const
 
@@ -12,7 +15,7 @@ export interface SessionData {
   signedInAt: string
 }
 
-export const loadArray = <T>(key: string, fallback: T[]): T[] => {
+export const loadArray = <T>(key: string, fallback: T[], schema?: ZodType<T>): T[] => {
   try {
     const raw = localStorage.getItem(key)
 
@@ -21,25 +24,41 @@ export const loadArray = <T>(key: string, fallback: T[]): T[] => {
       return fallback
     }
 
-    const parsed = JSON.parse(raw) as T[]
+    const parsed = JSON.parse(raw) as unknown
 
     if (!Array.isArray(parsed)) {
       localStorage.setItem(key, JSON.stringify(fallback))
       return fallback
     }
 
-    return parsed
+    if (!schema) {
+      return parsed as T[]
+    }
+
+    const result = z.array(schema).safeParse(parsed)
+
+    if (!result.success) {
+      localStorage.setItem(key, JSON.stringify(fallback))
+      return fallback
+    }
+
+    return result.data
   } catch {
     localStorage.setItem(key, JSON.stringify(fallback))
     return fallback
   }
 }
 
-export const saveArray = <T>(key: string, value: T[]): void => {
-  localStorage.setItem(key, JSON.stringify(value))
+export const saveArray = <T>(key: string, value: T[]): boolean => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+    return true
+  } catch {
+    return false
+  }
 }
 
-export const loadSession = (): SessionData | null => {
+export const loadSession = <T = SessionData>(schema?: ZodType<T>): T | null => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.session)
 
@@ -47,15 +66,33 @@ export const loadSession = (): SessionData | null => {
       return null
     }
 
-    return JSON.parse(raw) as SessionData
+    const parsed = JSON.parse(raw) as unknown
+
+    if (!schema) {
+      return parsed as T
+    }
+
+    const result = schema.safeParse(parsed)
+
+    if (!result.success) {
+      localStorage.removeItem(STORAGE_KEYS.session)
+      return null
+    }
+
+    return result.data
   } catch {
     localStorage.removeItem(STORAGE_KEYS.session)
     return null
   }
 }
 
-export const saveSession = (session: SessionData): void => {
-  localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session))
+export const saveSession = (session: SessionData): boolean => {
+  try {
+    localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session))
+    return true
+  } catch {
+    return false
+  }
 }
 
 export const clearSession = (): void => {

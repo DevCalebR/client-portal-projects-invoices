@@ -3,13 +3,12 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
+import { Notice } from '../components/Notice'
+import { appConfig } from '../config/env'
 import { useAuth } from '../context/AuthContext'
 
 const loginSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .email('Use a valid email address to continue.'),
+  email: z.string().trim().email('Use a valid email address to continue.'),
   password: z.string().min(6, 'Password must be at least 6 characters.'),
 })
 
@@ -29,8 +28,8 @@ export const LoginPage = () => {
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: 'admin@example.com',
-      password: 'admin123',
+      email: appConfig.enableDemoMode ? 'admin@example.com' : '',
+      password: appConfig.enableDemoMode ? 'admin123' : '',
     },
   })
 
@@ -54,17 +53,28 @@ export const LoginPage = () => {
     })
   }
 
+  if (loading && !user) {
+    return (
+      <main className="login-shell">
+        <section className="card auth-card">
+          <p className="loading-placeholder">Checking your session…</p>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="login-shell">
       <section className="card auth-card">
-        <p className="eyebrow">Freelance portfolio demo</p>
+        <p className="eyebrow">{appConfig.enableDemoMode ? 'Freelance portfolio demo' : 'Secure login'}</p>
         <h1>Client Portal Login</h1>
         <p className="auth-copy">
-          Sign in with one of the seeded demo accounts. This app intentionally mirrors a
-          real freelance workflow.
+          {appConfig.enableDemoMode
+            ? 'Sign in with one of the seeded demo accounts. This app intentionally mirrors a real freelance workflow.'
+            : `Use the credentials provisioned for your deployment. Contact ${appConfig.supportEmail} if access is unavailable.`}
         </p>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="form-stack">
+        <form onSubmit={handleSubmit(onSubmit)} className="form-stack" aria-busy={isSubmitting}>
           <label>
             Email
             <input type="email" autoComplete="username" {...register('email')} />
@@ -78,38 +88,44 @@ export const LoginPage = () => {
           {errors.password ? <p className="error">{errors.password.message}</p> : null}
 
           {isSubmitting ? <p className="status">Signing in...</p> : null}
-          {errors.root ? <p className="error">{errors.root.message}</p> : null}
+          {errors.root ? (
+            <Notice title="Unable to sign in" message={errors.root.message} tone="error" />
+          ) : null}
 
           <button className="btn btn--primary" type="submit" disabled={isSubmitting}>
             Login
           </button>
         </form>
 
-        <p className="muted">
-          Don&apos;t have an account? In this demo, use seeded credentials only.
-        </p>
-        <div className="demo-grid">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => {
-              setValue('email', 'admin@example.com')
-              setValue('password', 'admin123')
-            }}
-          >
-            Fill admin
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => {
-              setValue('email', 'client@example.com')
-              setValue('password', 'client123')
-            }}
-          >
-            Fill client
-          </button>
-        </div>
+        {appConfig.enableDemoMode ? (
+          <>
+            <p className="muted">
+              Don&apos;t have an account? In this demo, use seeded credentials only.
+            </p>
+            <div className="demo-grid">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  setValue('email', 'admin@example.com')
+                  setValue('password', 'admin123')
+                }}
+              >
+                Fill admin
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  setValue('email', 'client@example.com')
+                  setValue('password', 'client123')
+                }}
+              >
+                Fill client
+              </button>
+            </div>
+          </>
+        ) : null}
 
         <Link to="/dashboard" className="skip-link">
           Continue if already authenticated

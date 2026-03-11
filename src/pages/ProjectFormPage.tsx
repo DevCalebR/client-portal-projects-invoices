@@ -3,10 +3,18 @@ import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { z } from 'zod'
+import { Notice } from '../components/Notice'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { isAdminUser, PROJECT_STATUS_OPTIONS, PROJECT_STATUS_LABELS, type ProjectInput } from '../types/entities'
+import { useFeedback } from '../context/FeedbackContext'
+import {
+  PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_OPTIONS,
+  isAdminUser,
+  type ProjectInput,
+} from '../types/entities'
 import { getInputDate } from '../utils/format'
+import { logAppError } from '../utils/logger'
 
 const projectSchema = z
   .object({
@@ -37,13 +45,9 @@ export const ProjectFormPage = () => {
   const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { notify } = useFeedback()
   const isEdit = Boolean(id)
-  const {
-    createProject,
-    updateProject,
-    getProject,
-    isLoading,
-  } = useData()
+  const { createProject, updateProject, getProject, isLoading } = useData()
 
   const existing = isEdit && id ? getProject(id) : null
 
@@ -68,6 +72,7 @@ export const ProjectFormPage = () => {
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
+    setError,
   } = useForm<ProjectFormValues>({
     resolver: zodResolver(projectSchema),
     defaultValues,
@@ -79,28 +84,54 @@ export const ProjectFormPage = () => {
     }
   }, [isLoading, defaultValues, reset])
 
-  const onSubmit = (values: ProjectFormValues) => {
+  const onSubmit = async (values: ProjectFormValues) => {
     const payload: ProjectInput = {
       ...values,
       dueDate: values.dueDate || undefined,
       notes: values.notes || '',
     }
 
-    if (isEdit && id) {
-      updateProject(id, payload)
-      navigate(`/projects/${id}`)
-      return
-    }
+    try {
+      if (isEdit && id) {
+        updateProject(id, payload)
+        notify({
+          title: 'Project updated',
+          message: 'The project details were saved successfully.',
+          tone: 'success',
+        })
+        navigate(`/projects/${id}`)
+        return
+      }
 
-    const created = createProject(payload)
-    navigate(`/projects/${created.id}`)
+      const created = createProject(payload)
+      notify({
+        title: 'Project created',
+        message: 'The new project is ready for invoice and status tracking.',
+        tone: 'success',
+      })
+      navigate(`/projects/${created.id}`)
+    } catch (error) {
+      logAppError(error, { scope: 'ProjectFormPage.submit', projectId: id ?? 'new' })
+      setError('root', {
+        type: 'manual',
+        message: error instanceof Error ? error.message : 'Unable to save this project.',
+      })
+    }
   }
 
   if (!user || !isAdminUser(user)) {
     return null
   }
 
-  if (isEdit && !existing && !isLoading) {
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="loading-placeholder">Loading project details...</p>
+      </section>
+    )
+  }
+
+  if (isEdit && !existing) {
     return (
       <section className="card">
         <h1>Project not found</h1>
@@ -109,7 +140,7 @@ export const ProjectFormPage = () => {
     )
   }
 
-  if (!isLoading && !isEdit && clientOptions.length === 0) {
+  if (!isEdit && clientOptions.length === 0) {
     return (
       <section className="card">
         <h1>Client list unavailable</h1>
@@ -123,7 +154,11 @@ export const ProjectFormPage = () => {
       <div className="panel-head panel-head--tight">
         <h1>{isEdit ? 'Edit project' : 'Create new project'}</h1>
       </div>
-      <form className="form-stack" onSubmit={handleSubmit(onSubmit)}>
+      <form className="form-stack" onSubmit={handleSubmit(onSubmit)} aria-busy={isSubmitting}>
+        {errors.root?.message ? (
+          <Notice title="Unable to save project" message={errors.root.message} tone="error" />
+        ) : null}
+
         <label>
           Project name
           <input

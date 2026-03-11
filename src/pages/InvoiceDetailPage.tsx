@@ -1,10 +1,10 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { isAdminUser } from '../types/entities'
 import { formatCurrency, formatDate } from '../utils/format'
-import { StatusBadge } from '../components/StatusBadge'
-import { EmptyState } from '../components/EmptyState'
 
 export const InvoiceDetailPage = () => {
   const { user, users } = useAuth()
@@ -15,6 +15,14 @@ export const InvoiceDetailPage = () => {
     return null
   }
 
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="loading-placeholder">Loading invoice details...</p>
+      </section>
+    )
+  }
+
   const invoice = getInvoice(id)
 
   if (!invoice) {
@@ -22,6 +30,11 @@ export const InvoiceDetailPage = () => {
       <EmptyState
         title="Invoice not found"
         message="That invoice was not found or was removed."
+        action={
+          <Link className="btn btn--primary" to="/invoices">
+            Back to invoices
+          </Link>
+        }
       />
     )
   }
@@ -33,7 +46,6 @@ export const InvoiceDetailPage = () => {
   const project = getProject(invoice.projectId)
   const projectName = project?.name ?? 'Project unavailable'
   const clientName = users.find((person) => person.id === invoice.clientId)?.name ?? invoice.clientId
-
   const totals = invoice.lineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0)
 
   return (
@@ -71,20 +83,22 @@ export const InvoiceDetailPage = () => {
 
         <p className="note-block">{invoice.notes || 'No invoice notes were provided.'}</p>
 
-        {isAdminUser(user) ? (
-          <div className="panel-actions">
+        <div className="panel-actions">
+          <Link to={`/projects/${invoice.projectId}`} className="btn btn--ghost">
+            View project
+          </Link>
+          {isAdminUser(user) ? (
             <Link to={`/invoices/${invoice.id}/edit`} className="btn btn--primary">
               Edit invoice
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </section>
 
       <section className="card">
         <h2>Line items</h2>
-        {isLoading ? <p className="loading-placeholder">Loading line items...</p> : null}
 
-        {!isLoading && invoice.lineItems.length === 0 ? (
+        {invoice.lineItems.length === 0 ? (
           <p className="muted">No line items found.</p>
         ) : (
           <div className="table-wrap">

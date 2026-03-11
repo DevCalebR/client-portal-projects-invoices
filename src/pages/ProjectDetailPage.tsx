@@ -1,17 +1,25 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { isAdminUser } from '../types/entities'
 import { formatDate } from '../utils/format'
-import { StatusBadge } from '../components/StatusBadge'
 
 export const ProjectDetailPage = () => {
   const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
-  const { invoices, getProject } = useData()
+  const { invoices, getProject, isLoading } = useData()
 
   if (!user || !id) {
     return null
+  }
+
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="loading-placeholder">Loading project details...</p>
+      </section>
+    )
   }
 
   const project = getProject(id)
@@ -55,7 +63,7 @@ export const ProjectDetailPage = () => {
             <StatusBadge type="project" status={project.status} />
           </div>
           <div>
-            <p className="muted">Client ID</p>
+            <p className="muted">Client</p>
             <p>{clientName}</p>
             <small className="muted">({project.clientId})</small>
           </div>
@@ -91,9 +99,7 @@ export const ProjectDetailPage = () => {
               <li className="list-item list-item--spread" key={invoice.id}>
                 <div>
                   <Link to={`/invoices/${invoice.id}`}>{invoice.id}</Link>
-                  <small>
-                    Due {formatDate(invoice.dueDate)}
-                  </small>
+                  <small>Due {formatDate(invoice.dueDate)}</small>
                 </div>
                 <StatusBadge type="invoice" status={invoice.status} />
               </li>

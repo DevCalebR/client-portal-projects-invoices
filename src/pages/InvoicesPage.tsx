@@ -1,10 +1,17 @@
-import { Link, useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { INVOICE_STATUS_OPTIONS, INVOICE_STATUS_LABELS, type InvoiceStatus, isAdminUser } from '../types/entities'
-import { StatusBadge } from '../components/StatusBadge'
-import { EmptyState } from '../components/EmptyState'
+import { useFeedback } from '../context/FeedbackContext'
+import {
+  INVOICE_STATUS_LABELS,
+  INVOICE_STATUS_OPTIONS,
+  isAdminUser,
+  type InvoiceStatus,
+} from '../types/entities'
+import { logAppError } from '../utils/logger'
 import { formatCurrency, formatDate } from '../utils/format'
 
 const normalizeStatus = (value: string): InvoiceStatus | 'all' =>
@@ -14,8 +21,10 @@ export const InvoicesPage = () => {
   const navigate = useNavigate()
   const { user, users } = useAuth()
   const { invoices, isLoading, projects, deleteInvoice } = useData()
+  const { notify } = useFeedback()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | InvoiceStatus>('all')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const clientNameById = useMemo(
     () => new Map(users.map((person) => [person.id, person.name])),
@@ -51,6 +60,33 @@ export const InvoicesPage = () => {
   const clearFilters = () => {
     setSearch('')
     setStatusFilter('all')
+  }
+
+  const handleDelete = (invoiceId: string) => {
+    const shouldDelete = window.confirm(`Delete invoice ${invoiceId}? This cannot be undone.`)
+
+    if (!shouldDelete) {
+      return
+    }
+
+    try {
+      setPendingDeleteId(invoiceId)
+      deleteInvoice(invoiceId)
+      notify({
+        title: 'Invoice deleted',
+        message: `${invoiceId} was removed from the ledger.`,
+        tone: 'success',
+      })
+    } catch (error) {
+      logAppError(error, { scope: 'InvoicesPage.deleteInvoice', invoiceId })
+      notify({
+        title: 'Unable to delete invoice',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        tone: 'error',
+      })
+    } finally {
+      setPendingDeleteId(null)
+    }
   }
 
   if (!user) {
@@ -103,6 +139,13 @@ export const InvoicesPage = () => {
               ? 'Try adjusting search and status filters or create a new invoice.'
               : 'No invoices are assigned to your account at this time.'
           }
+          action={
+            isAdminUser(user) ? (
+              <Link className="btn btn--primary" to="/invoices/new">
+                Create invoice
+              </Link>
+            ) : undefined
+          }
         />
       ) : null}
 
@@ -141,10 +184,11 @@ export const InvoicesPage = () => {
                           <Link to={`/invoices/${invoice.id}/edit`}>Edit</Link>
                           <button
                             className="btn btn--danger btn--sm"
-                            onClick={() => deleteInvoice(invoice.id)}
+                            onClick={() => handleDelete(invoice.id)}
                             type="button"
+                            disabled={pendingDeleteId === invoice.id}
                           >
-                            Delete
+                            {pendingDeleteId === invoice.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </>
                       ) : null}

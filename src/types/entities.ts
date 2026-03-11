@@ -13,8 +13,14 @@ export interface PublicUser {
 }
 
 export interface User extends PublicUser {
+  passwordHash: string
+}
+
+export interface LegacyUser extends PublicUser {
   password: string
 }
+
+export type StoredUser = User | LegacyUser
 
 export interface Project {
   id: string
@@ -47,6 +53,22 @@ export interface Invoice {
   notes: string
   createdAt: string
   updatedAt: string
+}
+
+export type ActivityAction = 'created' | 'updated' | 'deleted' | 'restored'
+
+export type ActivitySubject = 'project' | 'invoice' | 'system'
+
+export interface ActivityEntry {
+  id: string
+  actorId: string
+  actorName: string
+  action: ActivityAction
+  subjectType: ActivitySubject
+  subjectId: string
+  subjectName: string
+  description: string
+  timestamp: string
 }
 
 export const PROJECT_STATUS_OPTIONS: ProjectStatus[] = [

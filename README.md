@@ -1,158 +1,128 @@
 # Client Portal — Projects & Invoices
 
-A portfolio-ready React + TypeScript SaaS-style demo that showcases:
+Client Portal is a React + TypeScript client portal SPA for managing projects and invoices across admin and client roles. This repository has been audited and hardened for deployment as a static demo application, with stronger validation, session handling, error boundaries, notifications, activity history, and cleaner deployment/docs coverage.
 
-- local authentication flow with session persistence
-- role-based route protection and role-specific navigation
-- project and invoice CRUD-style workflows
-- validated forms with line-item calculations
-- dashboard + searchable/filterable list views
-- resilient loading, empty, and error states
+## Feature list
 
-## What the app does
-
-This app simulates a freelance client portal:
-
-- **admin** users can manage all projects/invoices and create/edit/delete records
-- **client** users can view only their own assigned projects and invoices
-
-The entire experience is local-first and intentionally production-style in structure while staying easy to run and understand.
+- Admin dashboard with project/invoice overview, quick actions, and recent activity
+- Client dashboard scoped to the signed-in client
+- Role-based route protection and client/admin navigation
+- Project create/edit/delete workflows
+- Invoice create/edit/delete workflows with line item calculations
+- Session persistence with expiration and cross-tab sync
+- Runtime environment configuration via Vite env vars
+- Activity history tracking for project/invoice mutations
+- Empty states, inline form errors, destructive-action confirmation, and success/error notifications
 
 ## Tech stack
 
 - Vite
-- React
+- React 19
 - TypeScript
-- React Router
+- React Router 7
 - React Hook Form
 - Zod
-- localStorage-based persistence
+- localStorage-backed demo persistence
+
+## Architecture summary
+
+- `src/context/AuthContext.tsx`: local auth/session handling, hashed seeded credentials, session timeout
+- `src/context/DataContext.tsx`: project/invoice/activity state, persistence, mutation validation
+- `src/data/seed.ts`: seeded demo users/projects/invoices/activity
+- `src/data/storage.ts`: localStorage helpers with schema validation support
+- `src/config/env.ts`: runtime env parsing and defaults
+- `src/components/AppErrorBoundary.tsx`: global error fallback
+- `src/context/FeedbackContext.tsx`: transient notification layer
+
+There is no backend, database, or API layer in this repository. This version is production-hardened for a static demo deployment, not for storing real customer data.
 
 ## Demo accounts
 
-Use one of these accounts from the login page:
+Demo helpers are available only when `VITE_ENABLE_DEMO_MODE=true`.
 
 - Admin: `admin@example.com` / `admin123`
 - Client: `client@example.com` / `client123`
 - Additional seeded client: `noah@lakeside.co` / `client456`
 
-## Live demo
-
-- Production URL: https://client-portal-projects-invoices.netlify.app
-- This is a demo app using seeded local data and local-only authentication/session persistence.
-
-### Role behavior at a glance
-
-- Admin dashboard shows global cards and unfiltered lists.
-- Client dashboard filters to the signed-in client only.
-- Admin can create/edit/delete projects and invoices.
-- Client can open/view details and read-only lists for their scope.
-
-## Getting started
+## Local development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/login` and sign in with a seeded account.
+Open [http://localhost:5173/login](http://localhost:5173/login).
 
-## Useful routes
-
-- `/login`
-- `/dashboard`
-- `/projects`
-- `/projects/:id`
-- `/projects/new`
-- `/projects/:id/edit`
-- `/invoices`
-- `/invoices/:id`
-- `/invoices/new`
-- `/invoices/:id/edit`
-- `/settings`
-
-## Project structure
-
-```text
-src/
-  ├─ App.tsx
-  ├─ main.tsx
-  ├─ index.css
-  ├─ context/
-  │  ├─ AuthContext.tsx        Mock auth + session handling
-  │  └─ DataContext.tsx        Local project/invoice data providers
-  ├─ components/
-  │  ├─ AppLayout.tsx          Protected shell + navigation
-  │  ├─ EmptyState.tsx         Reusable empty state component
-  │  ├─ ProtectedRoute.tsx     Role and auth guard
-  │  └─ StatusBadge.tsx        Consistent status chips
-  ├─ data/
-  │  ├─ seed.ts                Seed users/projects/invoices
-  │  └─ storage.ts             localStorage key helpers
-  ├─ pages/
-  │  ├─ DashboardPage.tsx
-  │  ├─ LoginPage.tsx
-  │  ├─ NotFoundPage.tsx
-  │  ├─ ProjectDetailPage.tsx
-  │  ├─ ProjectFormPage.tsx
-  │  ├─ ProjectsPage.tsx
-  │  ├─ InvoiceDetailPage.tsx
-  │  ├─ InvoiceFormPage.tsx
-  │  ├─ InvoicesPage.tsx
-  │  └─ SettingsPage.tsx
-  ├─ types/
-  │  └─ entities.ts
-  └─ utils/
-     └─ format.ts
-```
-
-## Auth and persistence model
-
-- Auth data is bootstrapped from `seed.ts` and stored in localStorage under stable keys.
-- Session is saved at `cpp:session:v1` with a timestamp.
-- Project and invoice collections are read/written through storage helpers in `src/data/storage.ts`.
-- Seed data is retained when local data keys are missing and can be restored from Settings.
-
-This pattern keeps the project realistic and easy to swap to API calls later without changing UI contracts.
-
-## Scripts
+## Verification scripts
 
 ```bash
-npm install
 npm run lint
 npm run typecheck
 npm run build
 ```
 
-## Testing
+## Environment variables
 
-There is no automated test suite included in this version. The repo is intentionally kept lightweight for portfolio review, and behavior validation is handled via:
+Copy `.env.example` to `.env` and set:
 
-- route/auth role validation during interactive use
-- lint + typecheck + build validation
+- `VITE_APP_NAME`
+- `VITE_APP_SUBTITLE`
+- `VITE_SUPPORT_EMAIL`
+- `VITE_ENABLE_DEMO_MODE`
+- `VITE_SESSION_TIMEOUT_MINUTES`
 
-If you want to add tests, lightweight candidates are:
+All variables are public Vite variables and are safe to expose to the browser. Do not place secrets in `VITE_*` variables.
 
-- `ProjectFormPage` validation rules (required fields, due date checks)
-- invoice line-item total calculations
+## Production setup guide
 
-## Design polish focus
+### Static deployment
 
-- client names are shown instead of raw IDs on list and detail views
-- clearer role-specific copy on dashboard/list pages
-- search + status filters with clear actions
-- stronger project/invoice validation feedback
-- removed Vite scaffolding leftovers (`src/App.css`, old SVG assets)
+This app deploys as a static SPA.
 
-## Local architecture notes
+- Netlify uses [netlify.toml](./netlify.toml) for SPA redirects.
+- Vercel uses [vercel.json](./vercel.json) for SPA rewrites.
+- Build output is written to `dist/`.
 
-- Data layer and auth are split (`DataContext`, `AuthContext`) for easy future API swap.
-- Forms are schema-validated with Zod + React Hook Form for realistic quality signals.
-- Route guards are centralized (`ProtectedRoute`) for consistent RBAC behavior.
+### What you must configure
 
-## Future upgrade ideas
+1. Set the environment variables from `.env.example` in your hosting platform.
+2. Decide whether demo mode should remain enabled.
+3. Set a real support email for branded deployments.
+4. Choose a session timeout policy.
 
-- Replace localStorage with JWT/session-backed auth
-- Add backend-backed APIs for projects/invoices
-- Add invoice PDF export and email trigger flow
-- Add automated tests with Playwright/Vitest for critical flows
+### What this repository does not yet provide
+
+For a real SaaS rollout, you still need:
+
+1. Server-backed authentication
+2. Database-backed persistence
+3. Backend authorization enforcement
+4. Real audit logging/monitoring
+5. Payment/email/provider integrations if required
+
+## Deployment
+
+### Netlify
+
+1. Connect the repo.
+2. Set build command to `npm run build`.
+3. Set publish directory to `dist`.
+4. Add the environment variables from `.env.example`.
+
+### Vercel
+
+1. Import the repo.
+2. Set build command to `npm run build` if Vercel does not infer it.
+3. Set output directory to `dist`.
+4. Add the environment variables from `.env.example`.
+
+## Audit documentation
+
+- Full audit report: [docs/AUDIT_REPORT.md](./docs/AUDIT_REPORT.md)
+
+## Recommended next improvements
+
+1. Move auth and data to a server-backed API.
+2. Add automated end-to-end tests for login, CRUD, and authorization.
+3. Add remote error monitoring and analytics.
+4. Add payment delivery, PDF generation, and notification providers if invoices become real.

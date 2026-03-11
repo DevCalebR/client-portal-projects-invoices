@@ -3,15 +3,18 @@ import { useEffect, useMemo } from 'react'
 import { useFieldArray, useForm, useWatch, type SubmitHandler } from 'react-hook-form'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
+import { Notice } from '../components/Notice'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
+import { useFeedback } from '../context/FeedbackContext'
 import {
-  INVOICE_STATUS_OPTIONS,
   INVOICE_STATUS_LABELS,
+  INVOICE_STATUS_OPTIONS,
   type InvoiceInput,
   isAdminUser,
 } from '../types/entities'
 import { calculateInvoiceSubtotal, formatCurrency, getInputDate } from '../utils/format'
+import { logAppError } from '../utils/logger'
 
 const lineItemSchema = z.object({
   id: z.string().optional(),
@@ -64,20 +67,14 @@ const invoiceSchema = z
 type InvoiceFormValues = z.infer<typeof invoiceSchema>
 
 export const InvoiceFormPage = () => {
-  const { user } = useAuth()
+  const { user, users } = useAuth()
   const { id } = useParams<{ id: string }>()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
+  const { notify } = useFeedback()
   const [searchParams] = useSearchParams()
   const queryProjectId = searchParams.get('projectId')
-  const {
-    projects,
-    createInvoice,
-    updateInvoice,
-    getInvoice,
-    getProject,
-    isLoading,
-  } = useData()
+  const { projects, createInvoice, updateInvoice, getInvoice, getProject, isLoading } = useData()
 
   const currentInvoice = isEdit && id ? getInvoice(id) : null
   const prefillProject = queryProjectId ? projects.find((project) => project.id === queryProjectId) : null
@@ -100,9 +97,7 @@ export const InvoiceFormPage = () => {
           description: lineItem.description,
           quantity: lineItem.quantity,
           rate: lineItem.rate,
-        })) ?? [
-          { id: undefined, description: '', quantity: 1, rate: 0 },
-        ],
+        })) ?? [{ id: undefined, description: '', quantity: 1, rate: 0.01 }],
     }),
     [activeProjectOptions, currentInvoice, initialDate, prefillProject?.clientId, prefillProject?.id],
   )
@@ -114,6 +109,7 @@ export const InvoiceFormPage = () => {
     setValue,
     formState: { errors, isSubmitting },
     reset,
+    setError,
   } = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: initialValues,
@@ -128,6 +124,10 @@ export const InvoiceFormPage = () => {
 
   const projectId = useWatch({ control, name: 'projectId' })
   const lineItems = useWatch({ control, name: 'lineItems' })
+  const selectedProject = projectId ? getProject(projectId) : null
+  const selectedClient = selectedProject
+    ? users.find((person) => person.id === selectedProject.clientId)
+    : null
 
   const subtotal = useMemo(() => calculateInvoiceSubtotal(lineItems ?? []), [lineItems])
 
@@ -170,21 +170,59 @@ export const InvoiceFormPage = () => {
       })),
     }
 
-    if (isEdit && id) {
-      updateInvoice(id, payload)
-      navigate(`/invoices/${id}`)
-      return
-    }
+    try {
+      if (isEdit && id) {
+        updateInvoice(id, payload)
+        notify({
+          title: 'Invoice updated',
+          message: 'The invoice was saved successfully.',
+          tone: 'success',
+        })
+        navigate(`/invoices/${id}`)
+        return
+      }
 
-    const created = createInvoice(payload)
-    navigate(`/invoices/${created.id}`)
+      const created = createInvoice(payload)
+      notify({
+        title: 'Invoice created',
+        message: 'The invoice is ready for client review.',
+        tone: 'success',
+      })
+      navigate(`/invoices/${created.id}`)
+    } catch (error) {
+      logAppError(error, { scope: 'InvoiceFormPage.submit', invoiceId: id ?? 'new' })
+      setError('root', {
+        type: 'manual',
+        message: error instanceof Error ? error.message : 'Unable to save this invoice.',
+      })
+    }
   }
 
   if (!user || !isAdminUser(user)) {
     return null
   }
 
-  if (!isLoading && activeProjectOptions.length === 0) {
+  if (isLoading) {
+    return (
+      <section className="card">
+        <p className="loading-placeholder">Loading invoice details...</p>
+      </section>
+    )
+  }
+
+  if (isEdit && !currentInvoice) {
+    return (
+      <section className="card">
+        <h1>Invoice not found</h1>
+        <p>This invoice does not exist and cannot be edited.</p>
+        <Link className="btn btn--primary" to="/invoices">
+          Back to invoices
+        </Link>
+      </section>
+    )
+  }
+
+  if (activeProjectOptions.length === 0) {
     return (
       <section className="card">
         <h1>Can't create an invoice yet</h1>
@@ -206,7 +244,11 @@ export const InvoiceFormPage = () => {
           Back
         </Link>
       </div>
-      <form className="form-stack" onSubmit={handleSubmit(onSubmit)}>
+      <form className="form-stack" onSubmit={handleSubmit(onSubmit)} aria-busy={isSubmitting}>
+        {errors.root?.message ? (
+          <Notice title="Unable to save invoice" message={errors.root.message} tone="error" />
+        ) : null}
+
         <label>
           Project
           <select {...register('projectId')} disabled={isSubmitting}>
@@ -220,9 +262,18 @@ export const InvoiceFormPage = () => {
           {errors.projectId ? <p className="error">{errors.projectId.message}</p> : null}
         </label>
 
+        <input type="hidden" {...register('clientId')} />
         <label>
-          Client
-          <input {...register('clientId')} readOnly disabled={isSubmitting} />
+          Assigned client
+          <input
+            value={
+              selectedClient
+                ? `${selectedClient.name}${selectedClient.company ? ` • ${selectedClient.company}` : ''}`
+                : 'Select a project to assign a client'
+            }
+            readOnly
+            disabled
+          />
           {errors.clientId ? <p className="error">{errors.clientId.message}</p> : null}
         </label>
 
@@ -263,7 +314,8 @@ export const InvoiceFormPage = () => {
             <button
               className="btn btn--ghost"
               type="button"
-              onClick={() => append({ description: '', quantity: 1, rate: 0 })}
+              onClick={() => append({ description: '', quantity: 1, rate: 0.01 })}
+              disabled={isSubmitting}
             >
               Add line
             </button>
@@ -316,7 +368,7 @@ export const InvoiceFormPage = () => {
                 type="button"
                 className="btn btn--danger btn--sm"
                 onClick={() => remove(index)}
-                disabled={fields.length === 1}
+                disabled={fields.length === 1 || isSubmitting}
               >
                 Remove
               </button>

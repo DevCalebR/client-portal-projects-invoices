@@ -1,22 +1,30 @@
-import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { EmptyState } from '../components/EmptyState'
+import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { isAdminUser, type ProjectStatus, PROJECT_STATUS_OPTIONS, PROJECT_STATUS_LABELS } from '../types/entities'
-import { StatusBadge } from '../components/StatusBadge'
-import { EmptyState } from '../components/EmptyState'
+import { useFeedback } from '../context/FeedbackContext'
+import {
+  PROJECT_STATUS_LABELS,
+  PROJECT_STATUS_OPTIONS,
+  isAdminUser,
+  type ProjectStatus,
+} from '../types/entities'
+import { logAppError } from '../utils/logger'
 import { formatDate } from '../utils/format'
 
-const projectStatusFromValue = (value: string): ProjectStatus | 'all' => {
-  return PROJECT_STATUS_OPTIONS.includes(value as ProjectStatus) ? (value as ProjectStatus) : 'all'
-}
+const projectStatusFromValue = (value: string): ProjectStatus | 'all' =>
+  PROJECT_STATUS_OPTIONS.includes(value as ProjectStatus) ? (value as ProjectStatus) : 'all'
 
 export const ProjectsPage = () => {
   const navigate = useNavigate()
   const { user, users } = useAuth()
   const { projects, isLoading, deleteProject } = useData()
+  const { notify } = useFeedback()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | ProjectStatus>('all')
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const getClientName = (clientId: string) =>
     users.find((person) => person.id === clientId)?.name ?? clientId
@@ -27,9 +35,7 @@ export const ProjectsPage = () => {
 
   const canEdit = isAdminUser(user)
 
-  const visibleProjects = projects.filter((project) =>
-    canEdit ? true : project.clientId === user.id,
-  )
+  const visibleProjects = projects.filter((project) => (canEdit ? true : project.clientId === user.id))
 
   const filteredProjects = visibleProjects
     .filter((project) => {
@@ -42,6 +48,35 @@ export const ProjectsPage = () => {
   const clearFilters = () => {
     setSearch('')
     setStatusFilter('all')
+  }
+
+  const handleDelete = (projectId: string, projectName: string) => {
+    const shouldDelete = window.confirm(
+      `Delete "${projectName}"? Linked invoices for this project will also be removed.`,
+    )
+
+    if (!shouldDelete) {
+      return
+    }
+
+    try {
+      setPendingDeleteId(projectId)
+      deleteProject(projectId)
+      notify({
+        title: 'Project deleted',
+        message: `"${projectName}" and any linked invoices were removed.`,
+        tone: 'success',
+      })
+    } catch (error) {
+      logAppError(error, { scope: 'ProjectsPage.deleteProject', projectId })
+      notify({
+        title: 'Unable to delete project',
+        message: error instanceof Error ? error.message : 'Please try again.',
+        tone: 'error',
+      })
+    } finally {
+      setPendingDeleteId(null)
+    }
   }
 
   return (
@@ -92,6 +127,13 @@ export const ProjectsPage = () => {
               ? 'Try adjusting search and status filters or create a new project from the button above.'
               : 'No assigned projects match the current filters.'
           }
+          action={
+            canEdit ? (
+              <Link className="btn btn--primary" to="/projects/new">
+                Create project
+              </Link>
+            ) : undefined
+          }
         />
       ) : (
         <section className="card">
@@ -126,10 +168,11 @@ export const ProjectsPage = () => {
                           <Link to={`/projects/${project.id}/edit`}>Edit</Link>
                           <button
                             className="btn btn--danger btn--sm"
-                            onClick={() => deleteProject(project.id)}
+                            onClick={() => handleDelete(project.id, project.name)}
                             type="button"
+                            disabled={pendingDeleteId === project.id}
                           >
-                            Delete
+                            {pendingDeleteId === project.id ? 'Deleting...' : 'Delete'}
                           </button>
                         </>
                       ) : null}
