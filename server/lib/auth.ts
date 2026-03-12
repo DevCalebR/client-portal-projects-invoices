@@ -17,6 +17,10 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
+const buildWorkspaceFallbackName = (orgId: string) => `Workspace ${orgId.slice(-6).toUpperCase()}`
+
+const buildWorkspaceFallbackSlug = (orgId: string) => `workspace-${slugify(orgId).slice(-18)}`
+
 const normalizeError = (error: unknown) => {
   if (error instanceof Error) {
     return {
@@ -53,6 +57,12 @@ export const syncRequestContext = async (
     orgId: auth.orgId ?? null,
     orgRole: auth.orgRole ?? null,
     requireOrganization: options?.requireOrganization ?? false,
+  })
+
+  console.log('SESSION INIT', {
+    traceId,
+    userId: auth.userId ?? null,
+    orgId: auth.orgId ?? null,
   })
 
   if (!auth.userId) {
@@ -131,25 +141,63 @@ export const syncRequestContext = async (
       return request.platform
     }
 
-    const clerkOrganization = await clerkClient.organizations.getOrganization({
-      organizationId: auth.orgId,
+    let clerkOrganization:
+      | Awaited<ReturnType<typeof clerkClient.organizations.getOrganization>>
+      | null = null
+
+    try {
+      clerkOrganization = await clerkClient.organizations.getOrganization({
+        organizationId: auth.orgId,
+      })
+    } catch (error) {
+      logAuthTrace('sync.organization_fetch_error', {
+        traceId,
+        userId: auth.userId,
+        orgId: auth.orgId,
+        error: normalizeError(error),
+      })
+    }
+
+    const existingOrganization = await db.organization.findUnique({
+      where: {
+        clerkOrganizationId: auth.orgId,
+      },
     })
 
-    const organization = await db.organization.upsert({
-      where: { clerkOrganizationId: clerkOrganization.id },
-      update: {
-        name: clerkOrganization.name,
-        slug: clerkOrganization.slug || slugify(clerkOrganization.name),
-        ownerUserId: user.id,
-      },
-      create: {
-        clerkOrganizationId: clerkOrganization.id,
-        name: clerkOrganization.name,
-        slug: clerkOrganization.slug || slugify(clerkOrganization.name),
-        ownerUserId: user.id,
-        billingEmail: user.email,
-      },
-    })
+    const organizationName = clerkOrganization?.name || existingOrganization?.name || buildWorkspaceFallbackName(auth.orgId)
+    const organizationSlug =
+      clerkOrganization?.slug
+      || existingOrganization?.slug
+      || buildWorkspaceFallbackSlug(auth.orgId)
+
+    const organization = clerkOrganization
+      ? await db.organization.upsert({
+          where: { clerkOrganizationId: auth.orgId },
+          update: {
+            name: organizationName,
+            slug: organizationSlug,
+            ownerUserId: existingOrganization?.ownerUserId ?? user.id,
+            billingEmail: existingOrganization?.billingEmail ?? user.email,
+          },
+          create: {
+            clerkOrganizationId: auth.orgId,
+            name: organizationName,
+            slug: organizationSlug,
+            ownerUserId: user.id,
+            billingEmail: user.email,
+          },
+        })
+      : existingOrganization
+        ? existingOrganization
+        : await db.organization.create({
+            data: {
+              clerkOrganizationId: auth.orgId,
+              name: organizationName,
+              slug: organizationSlug,
+              ownerUserId: user.id,
+              billingEmail: user.email,
+            },
+          })
 
     request.platform = {
       ...request.platform,
@@ -162,6 +210,7 @@ export const syncRequestContext = async (
       orgId: auth.orgId,
       organizationRecordId: organization.id,
       organizationSlug: organization.slug,
+      organizationSource: clerkOrganization ? 'clerk' : existingOrganization ? 'database' : 'fallback_create',
     })
 
     const existingMember = await db.organizationMember.findUnique({
