@@ -1,71 +1,115 @@
 import { CreateOrganization, OrganizationSwitcher } from '@clerk/react'
 import { useEffect } from 'react'
-import { Navigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { AuthDebugPanel } from '../components/AuthDebugPanel'
+import { TrackedNavigate } from '../components/TrackedNavigate'
 import { useAuth } from '../context/AuthContext'
 import { logAppEvent } from '../utils/logger'
 
 export const OnboardingPage = () => {
+  const location = useLocation()
   const {
     organization,
+    user,
     clerkLoaded,
     clerkOrgId,
+    clerkActiveOrganization,
     loading,
+    isSignedIn,
     isOrganizationSyncing,
+    isWorkspaceReady,
+    sessionSyncState,
     organizationSyncError,
+    lastSessionSnapshot,
     refreshSession,
   } = useAuth()
 
+  const shouldWaitForWorkspace =
+    !clerkLoaded
+    || loading
+    || (Boolean(clerkOrgId) && (sessionSyncState === 'loading' || sessionSyncState === 'partial'))
+
+  const shouldShowSyncError =
+    Boolean(clerkOrgId)
+    && sessionSyncState === 'error'
+    && !organization
+
   useEffect(() => {
     logAppEvent('auth.onboarding', {
-      clerkLoaded,
-      clerkOrgId,
-      sessionOrgId: organization?.clerkOrganizationId ?? null,
+      route: location.pathname,
+      isLoaded: clerkLoaded,
+      isSignedIn,
+      userId: user?.clerkUserId ?? null,
+      organization: organization
+        ? {
+            id: organization.id,
+            clerkOrganizationId: organization.clerkOrganizationId,
+            slug: organization.slug,
+            name: organization.name,
+          }
+        : null,
+      organizationId: clerkOrgId,
+      activeOrganization: clerkActiveOrganization,
       loading,
       isOrganizationSyncing,
+      isWorkspaceReady,
+      sessionSyncState,
       organizationSyncError,
+      redirectDestination: organization && isWorkspaceReady ? '/dashboard' : null,
+      sessionMeta: lastSessionSnapshot?.meta ?? null,
     })
   }, [
+    clerkActiveOrganization,
     clerkLoaded,
     clerkOrgId,
-    organization?.clerkOrganizationId,
-    loading,
     isOrganizationSyncing,
+    isSignedIn,
+    isWorkspaceReady,
+    lastSessionSnapshot?.meta,
+    loading,
+    location.pathname,
+    organization,
     organizationSyncError,
+    sessionSyncState,
+    user?.clerkUserId,
   ])
 
-  if (!clerkLoaded || loading || isOrganizationSyncing) {
+  if (shouldWaitForWorkspace) {
     return (
       <main className="login-shell">
         <section className="card auth-card">
           <p className="eyebrow">Workspace onboarding</p>
           <h1>Finishing your workspace setup</h1>
           <p className="auth-copy">
-            Your organization was selected. The workspace is syncing and you will be redirected automatically.
+            Your organization was selected. The application is waiting for the workspace session to finish syncing.
           </p>
         </section>
       </main>
     )
   }
 
-  if (organization) {
-    return <Navigate to="/dashboard" replace />
+  if (organization && isWorkspaceReady) {
+    return <TrackedNavigate to="/dashboard" reason="workspace_ready" />
   }
 
-  if (clerkOrgId && organizationSyncError) {
+  if (shouldShowSyncError) {
     return (
       <main className="login-shell">
+        <AuthDebugPanel
+          title="Workspace sync stalled"
+          message={organizationSyncError ?? 'The selected organization did not become a ready application session.'}
+          redirectDestination="/dashboard"
+        />
         <section className="card auth-card">
-          <p className="eyebrow">Workspace onboarding</p>
-          <h1>We could not load the selected workspace</h1>
-          <p className="auth-copy">
-            The organization is selected in Clerk, but the application session could not finish syncing it.
+          <p className="muted">
+            The Clerk organization is selected, but the backend session is still incomplete. Use the debug panel above
+            to inspect the session payload and retry the sync.
           </p>
           <div className="form-actions">
             <button className="btn btn--primary" type="button" onClick={() => void refreshSession()}>
               Retry workspace sync
             </button>
           </div>
-          <p className="muted">{organizationSyncError}</p>
         </section>
       </main>
     )

@@ -580,6 +580,23 @@ tbody td {
   gap: 0.8rem;
 }
 
+.debug-panel {
+  width: min(900px, 100%);
+}
+
+.debug-panel__pre {
+  margin: 0;
+  padding: 0.85rem;
+  border-radius: 14px;
+  border: 1px solid #d5dae4;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow: auto;
+  max-height: 420px;
+}
+
 .eyebrow {
   color: #7c3aed;
   font-weight: 700;

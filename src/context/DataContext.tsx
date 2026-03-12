@@ -22,6 +22,7 @@ import type {
   ProjectInput,
 } from '../types/entities'
 import { useAuth } from './AuthContext'
+import { logAppEvent } from '../utils/logger'
 
 interface DataContextType {
   clients: Client[]
@@ -63,7 +64,7 @@ export const useData = () => {
 }
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
-  const { isSignedIn, organization, loading } = useAuth()
+  const { isSignedIn, organization, loading, clerkOrgId, sessionSyncState, isWorkspaceReady } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [clients, setClients] = useState<Client[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -72,6 +73,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [activities, setActivities] = useState<ActivityEvent[]>([])
 
   const refresh = useCallback(async () => {
+    if (loading || (isSignedIn && clerkOrgId && !isWorkspaceReady)) {
+      setIsLoading(true)
+      return
+    }
+
     if (!isSignedIn || !organization) {
       setClients([])
       setProjects([])
@@ -102,15 +108,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false)
     }
-  }, [isSignedIn, organization])
+  }, [clerkOrgId, isSignedIn, isWorkspaceReady, loading, organization])
 
   useEffect(() => {
-    if (loading) {
+    if (loading || (isSignedIn && clerkOrgId && !isWorkspaceReady)) {
+      logAppEvent('data.refresh.skipped', {
+        loading,
+        isSignedIn,
+        clerkOrgId,
+        sessionSyncState,
+        isWorkspaceReady,
+        sessionOrgId: organization?.clerkOrganizationId ?? null,
+      })
       return
     }
 
     void refresh()
-  }, [loading, refresh])
+  }, [clerkOrgId, isSignedIn, isWorkspaceReady, loading, organization?.clerkOrganizationId, refresh, sessionSyncState])
 
   const createClient = useCallback(async (input: ClientInput) => {
     const response = await apiFetch<{ client: Client }>('/api/clients', {

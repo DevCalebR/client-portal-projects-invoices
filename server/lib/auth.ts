@@ -17,51 +17,86 @@ const slugify = (value: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
-export const syncRequestContext = async (request: Request, options?: { requireOrganization?: boolean }) => {
+const normalizeError = (error: unknown) => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }
+  }
+
+  return {
+    message: typeof error === 'string' ? error : 'Unknown error',
+  }
+}
+
+const logAuthTrace = (event: string, meta: Record<string, unknown>) => {
+  console.info('[auth.trace]', {
+    event,
+    ...meta,
+    timestamp: new Date().toISOString(),
+  })
+}
+
+export const syncRequestContext = async (
+  request: Request,
+  options?: { requireOrganization?: boolean; traceId?: string },
+) => {
   const auth = getAuth(request)
+  const traceId = options?.traceId ?? `trace_${Date.now()}`
+
+  logAuthTrace('sync.start', {
+    traceId,
+    path: request.path,
+    userId: auth.userId ?? null,
+    orgId: auth.orgId ?? null,
+    orgRole: auth.orgRole ?? null,
+    requireOrganization: options?.requireOrganization ?? false,
+  })
 
   if (!auth.userId) {
+    logAuthTrace('sync.unauthorized', {
+      traceId,
+      path: request.path,
+    })
     throw new AppError(401, 'Authentication is required.', 'UNAUTHORIZED')
   }
 
-  const clerkUser = await clerkClient.users.getUser(auth.userId)
+  try {
+    const clerkUser = await clerkClient.users.getUser(auth.userId)
 
-  const user = await db.user.upsert({
-    where: { clerkUserId: clerkUser.id },
-    update: {
-      email: clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress ?? '',
-      firstName: clerkUser.firstName ?? undefined,
-      lastName: clerkUser.lastName ?? undefined,
-      fullName: buildFullName(
-        clerkUser.firstName,
-        clerkUser.lastName,
-        clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress,
-      ),
-      avatarUrl: clerkUser.imageUrl ?? undefined,
-    },
-    create: {
-      clerkUserId: clerkUser.id,
-      email: clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress ?? '',
-      firstName: clerkUser.firstName ?? undefined,
-      lastName: clerkUser.lastName ?? undefined,
-      fullName: buildFullName(
-        clerkUser.firstName,
-        clerkUser.lastName,
-        clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress,
-      ),
-      avatarUrl: clerkUser.imageUrl ?? undefined,
-    },
-  })
-
-  if (!auth.orgId) {
-    if (options?.requireOrganization) {
-      throw new AppError(403, 'Select an organization before continuing.', 'ORG_REQUIRED')
-    }
+    const user = await db.user.upsert({
+      where: { clerkUserId: clerkUser.id },
+      update: {
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress ?? '',
+        firstName: clerkUser.firstName ?? undefined,
+        lastName: clerkUser.lastName ?? undefined,
+        fullName: buildFullName(
+          clerkUser.firstName,
+          clerkUser.lastName,
+          clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress,
+        ),
+        avatarUrl: clerkUser.imageUrl ?? undefined,
+      },
+      create: {
+        clerkUserId: clerkUser.id,
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress ?? '',
+        firstName: clerkUser.firstName ?? undefined,
+        lastName: clerkUser.lastName ?? undefined,
+        fullName: buildFullName(
+          clerkUser.firstName,
+          clerkUser.lastName,
+          clerkUser.primaryEmailAddress?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress,
+        ),
+        avatarUrl: clerkUser.imageUrl ?? undefined,
+      },
+    })
 
     request.platform = {
       auth: {
         userId: auth.userId,
-        orgId: null,
+        orgId: auth.orgId ?? null,
         orgRole: auth.orgRole ?? null,
       },
       user,
@@ -71,100 +106,189 @@ export const syncRequestContext = async (request: Request, options?: { requireOr
       clientProfile: null,
     }
 
-    return request.platform
-  }
+    logAuthTrace('sync.user_ready', {
+      traceId,
+      userId: auth.userId,
+      orgId: auth.orgId ?? null,
+      orgRole: auth.orgRole ?? null,
+      userRecordId: user.id,
+      email: user.email,
+    })
 
-  const clerkOrganization = await clerkClient.organizations.getOrganization({
-    organizationId: auth.orgId,
-  })
-
-  const organization = await db.organization.upsert({
-    where: { clerkOrganizationId: clerkOrganization.id },
-    update: {
-      name: clerkOrganization.name,
-      slug: clerkOrganization.slug || slugify(clerkOrganization.name),
-      ownerUserId: user.id,
-    },
-    create: {
-      clerkOrganizationId: clerkOrganization.id,
-      name: clerkOrganization.name,
-      slug: clerkOrganization.slug || slugify(clerkOrganization.name),
-      ownerUserId: user.id,
-      billingEmail: user.email,
-    },
-  })
-
-  const existingMember = await db.organizationMember.findUnique({
-    where: {
-      organizationId_userId: {
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    },
-  })
-
-  const role = hasMappedClerkRole(auth.orgRole)
-    ? mapClerkRole(auth.orgRole)
-    : existingMember?.role ?? (organization.ownerUserId === user.id ? OrganizationRole.ADMIN : OrganizationRole.CLIENT)
-
-  const member = await db.organizationMember.upsert({
-    where: {
-      organizationId_userId: {
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    },
-    update: {
-      role,
-      status: 'ACTIVE',
-    },
-    create: {
-      organizationId: organization.id,
-      userId: user.id,
-      role,
-      status: 'ACTIVE',
-    },
-  })
-
-  const clientProfile =
-    role === OrganizationRole.CLIENT
-      ? await db.client.upsert({
-          where: {
-            organizationId_email: {
-              organizationId: organization.id,
-              email: user.email,
-            },
-          },
-          update: {
-            memberId: member.id,
-            name: user.fullName,
-            email: user.email,
-          },
-          create: {
-            organizationId: organization.id,
-            memberId: member.id,
-            name: user.fullName,
-            email: user.email,
-            billingEmail: user.email,
-            portalAccessEnabled: true,
-          },
+    if (!auth.orgId) {
+      if (options?.requireOrganization) {
+        logAuthTrace('sync.org_required', {
+          traceId,
+          userId: auth.userId,
         })
-      : null
+        throw new AppError(403, 'Select an organization before continuing.', 'ORG_REQUIRED')
+      }
 
-  request.platform = {
-    auth: {
+      logAuthTrace('sync.no_org_selected', {
+        traceId,
+        userId: auth.userId,
+      })
+      return request.platform
+    }
+
+    const clerkOrganization = await clerkClient.organizations.getOrganization({
+      organizationId: auth.orgId,
+    })
+
+    const organization = await db.organization.upsert({
+      where: { clerkOrganizationId: clerkOrganization.id },
+      update: {
+        name: clerkOrganization.name,
+        slug: clerkOrganization.slug || slugify(clerkOrganization.name),
+        ownerUserId: user.id,
+      },
+      create: {
+        clerkOrganizationId: clerkOrganization.id,
+        name: clerkOrganization.name,
+        slug: clerkOrganization.slug || slugify(clerkOrganization.name),
+        ownerUserId: user.id,
+        billingEmail: user.email,
+      },
+    })
+
+    request.platform = {
+      ...request.platform,
+      organization,
+    }
+
+    logAuthTrace('sync.organization_ready', {
+      traceId,
       userId: auth.userId,
       orgId: auth.orgId,
-      orgRole: auth.orgRole ?? null,
-    },
-    user,
-    organization,
-    member,
-    role,
-    clientProfile,
-  }
+      organizationRecordId: organization.id,
+      organizationSlug: organization.slug,
+    })
 
-  return request.platform
+    const existingMember = await db.organizationMember.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: organization.id,
+          userId: user.id,
+        },
+      },
+    })
+
+    logAuthTrace('sync.membership_lookup', {
+      traceId,
+      userId: auth.userId,
+      orgId: auth.orgId,
+      existingMemberId: existingMember?.id ?? null,
+      existingMemberRole: existingMember?.role ?? null,
+      existingMemberStatus: existingMember?.status ?? null,
+    })
+
+    const role = hasMappedClerkRole(auth.orgRole)
+      ? mapClerkRole(auth.orgRole)
+      : existingMember?.role ?? (organization.ownerUserId === user.id ? OrganizationRole.ADMIN : OrganizationRole.CLIENT)
+
+    logAuthTrace('sync.role_resolved', {
+      traceId,
+      userId: auth.userId,
+      orgId: auth.orgId,
+      clerkOrgRole: auth.orgRole ?? null,
+      resolvedRole: role,
+      ownerUserId: organization.ownerUserId,
+    })
+
+    const member = await db.organizationMember.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: organization.id,
+          userId: user.id,
+        },
+      },
+      update: {
+        role,
+        status: 'ACTIVE',
+      },
+      create: {
+        organizationId: organization.id,
+        userId: user.id,
+        role,
+        status: 'ACTIVE',
+      },
+    })
+
+    request.platform = {
+      ...request.platform,
+      member,
+      role,
+    }
+
+    logAuthTrace('sync.member_ready', {
+      traceId,
+      userId: auth.userId,
+      orgId: auth.orgId,
+      memberId: member.id,
+      memberRole: member.role,
+      memberStatus: member.status,
+    })
+
+    const clientProfile =
+      role === OrganizationRole.CLIENT
+        ? await db.client.upsert({
+            where: {
+              organizationId_email: {
+                organizationId: organization.id,
+                email: user.email,
+              },
+            },
+            update: {
+              memberId: member.id,
+              name: user.fullName,
+              email: user.email,
+            },
+            create: {
+              organizationId: organization.id,
+              memberId: member.id,
+              name: user.fullName,
+              email: user.email,
+              billingEmail: user.email,
+              portalAccessEnabled: true,
+            },
+          })
+        : null
+
+    request.platform = {
+      ...request.platform,
+      clientProfile,
+    }
+
+    logAuthTrace('sync.complete', {
+      traceId,
+      userId: auth.userId,
+      orgId: auth.orgId,
+      memberId: member.id,
+      role,
+      clientProfileId: clientProfile?.id ?? null,
+    })
+
+    return request.platform
+  } catch (error) {
+    logAuthTrace('sync.error', {
+      traceId,
+      path: request.path,
+      userId: auth.userId ?? null,
+      orgId: auth.orgId ?? null,
+      orgRole: auth.orgRole ?? null,
+      partialContext: request.platform
+        ? {
+            userId: request.platform.user.id,
+            organizationId: request.platform.organization?.id ?? null,
+            memberId: request.platform.member?.id ?? null,
+            role: request.platform.role ?? null,
+            clientProfileId: request.platform.clientProfile?.id ?? null,
+          }
+        : null,
+      error: normalizeError(error),
+    })
+    throw error
+  }
 }
 
 export const getRequestContext = (request: Request) => {

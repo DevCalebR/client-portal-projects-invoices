@@ -35,7 +35,7 @@ function App() {
       <Route
         path="/onboarding"
         element={
-          <ProtectedRoute requireOrganization={false}>
+          <ProtectedRoute requireOrganization={false} allowPendingWorkspace>
             {withSuspense(<OnboardingPage />)}
           </ProtectedRoute>
         }

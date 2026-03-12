@@ -1,10 +1,12 @@
 import { OrganizationSwitcher, UserButton } from '@clerk/react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { appConfig } from '../config/env'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { BILLING_PLAN_LABELS, isInternalRole } from '../types/entities'
 import { FeedbackViewport } from './FeedbackViewport'
+import { logAppEvent } from '../utils/logger'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? 'link link--active' : 'link'
@@ -43,8 +45,47 @@ const Header = () => {
 }
 
 export const AppLayout = () => {
-  const { membership } = useAuth()
+  const location = useLocation()
+  const {
+    user,
+    membership,
+    organization,
+    clerkLoaded,
+    isSignedIn,
+    clerkOrgId,
+    clerkActiveOrganization,
+    isWorkspaceReady,
+    sessionSyncState,
+    lastSessionSnapshot,
+  } = useAuth()
   const isInternal = isInternalRole(membership?.role)
+
+  useEffect(() => {
+    logAppEvent('auth.app_layout', {
+      route: location.pathname,
+      isLoaded: clerkLoaded,
+      isSignedIn,
+      userId: user?.clerkUserId ?? null,
+      organization,
+      organizationId: clerkOrgId,
+      activeOrganization: clerkActiveOrganization,
+      sessionSyncState,
+      isWorkspaceReady,
+      redirectDestination: null,
+      sessionMeta: lastSessionSnapshot?.meta ?? null,
+    })
+  }, [
+    clerkActiveOrganization,
+    clerkLoaded,
+    clerkOrgId,
+    isSignedIn,
+    isWorkspaceReady,
+    lastSessionSnapshot?.meta,
+    location.pathname,
+    organization,
+    sessionSyncState,
+    user?.clerkUserId,
+  ])
 
   return (
     <div className="shell">

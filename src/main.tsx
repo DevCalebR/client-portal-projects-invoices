@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.tsx'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
+import { AppBootstrapObserver } from './components/AppBootstrapObserver'
 import { appConfig } from './config/env'
 import { AuthProvider } from './context/AuthContext'
 import { DataProvider } from './context/DataContext'
@@ -51,6 +52,7 @@ if (!appConfig.clerkPublishableKey) {
             <FeedbackProvider>
               <DataProvider>
                 <BrowserRouter>
+                  <AppBootstrapObserver />
                   <App />
                 </BrowserRouter>
               </DataProvider>

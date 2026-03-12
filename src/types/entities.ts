@@ -67,6 +67,20 @@ export interface PendingInvitation {
   createdAt: number
 }
 
+export type SessionSyncSource = 'complete' | 'partial'
+
+export interface SessionMeta {
+  ready: boolean
+  source: SessionSyncSource
+  authUserId: string | null
+  authOrgId: string | null
+  authOrgRole: string | null
+  requestedOrgId: string | null
+  error: string | null
+  errorCode: string | null
+  syncedAt: string
+}
+
 export interface Client {
   id: string
   name: string
@@ -175,6 +189,7 @@ export interface AppSession {
   clientProfile: Client | null
   members: SessionMember[]
   invitations: PendingInvitation[]
+  meta?: SessionMeta
 }
 
 export interface ProjectInput {
