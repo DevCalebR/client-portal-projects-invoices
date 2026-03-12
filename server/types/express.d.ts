@@ -1,10 +1,9 @@
-import type { RequestContext } from './app.js'
+import 'express'
+import type { PlatformRequestContext } from './app.js'
 
-declare global {
-  namespace Express {
-    interface Request {
-      platform?: RequestContext
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    platform?: PlatformRequestContext
   }
 }
 

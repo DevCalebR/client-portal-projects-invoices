@@ -1,5 +1,11 @@
 import type { Client, Organization, OrganizationMember, OrganizationRole, User } from '@prisma/client'
 
+export interface VercelPlatformMetadata {
+  region?: string
+  city?: string
+  country?: string
+}
+
 export interface RequestContext {
   auth: {
     userId: string
@@ -13,3 +19,4 @@ export interface RequestContext {
   clientProfile: Client | null
 }
 
+export type PlatformRequestContext = RequestContext & VercelPlatformMetadata
