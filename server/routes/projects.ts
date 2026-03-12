@@ -163,6 +163,19 @@ projectsRouter.patch(
       throw new AppError(404, 'Project not found.', 'PROJECT_NOT_FOUND')
     }
 
+    if (payload.clientId) {
+      const client = await db.client.findFirst({
+        where: {
+          id: payload.clientId,
+          organizationId: context.organization!.id,
+        },
+      })
+
+      if (!client) {
+        throw new AppError(404, 'Client not found for this organization.', 'CLIENT_NOT_FOUND')
+      }
+    }
+
     const project = await db.project.update({
       where: { id: existing.id },
       data: {

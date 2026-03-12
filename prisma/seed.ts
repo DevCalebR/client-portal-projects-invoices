@@ -237,6 +237,7 @@ const seed = async () => {
       items: {
         create: [
           {
+            organizationId: organization.id,
             description: 'Dashboard implementation milestone',
             quantity: 8,
             unitPrice: '175.00',

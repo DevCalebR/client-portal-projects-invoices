@@ -29,7 +29,7 @@ if (!appConfig.clerkPublishableKey) {
           <p className="eyebrow">Configuration required</p>
           <h1>Clerk publishable key missing</h1>
           <p className="auth-copy">
-            Set `VITE_CLERK_PUBLISHABLE_KEY` before running the SaaS client locally.
+            Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` or `VITE_CLERK_PUBLISHABLE_KEY` before running the SaaS client locally.
           </p>
         </section>
       </main>

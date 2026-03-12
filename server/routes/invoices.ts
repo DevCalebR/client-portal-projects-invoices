@@ -124,6 +124,7 @@ invoicesRouter.post(
         updatedById: context.user.id,
         items: {
           create: payload.items.map((item, index) => ({
+            organizationId: context.organization!.id,
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -255,6 +256,34 @@ invoicesRouter.patch(
       throw new AppError(404, 'Invoice not found.', 'INVOICE_NOT_FOUND')
     }
 
+    const nextClientId = payload.clientId ?? existing.clientId
+    const nextProjectId = payload.projectId === undefined ? existing.projectId : payload.projectId
+
+    const client = await db.client.findFirst({
+      where: {
+        id: nextClientId,
+        organizationId: context.organization!.id,
+      },
+    })
+
+    if (!client) {
+      throw new AppError(404, 'Client not found.', 'CLIENT_NOT_FOUND')
+    }
+
+    if (nextProjectId) {
+      const project = await db.project.findFirst({
+        where: {
+          id: nextProjectId,
+          organizationId: context.organization!.id,
+          clientId: nextClientId,
+        },
+      })
+
+      if (!project) {
+        throw new AppError(404, 'Project not found for this client.', 'PROJECT_NOT_FOUND')
+      }
+    }
+
     const items = payload.items ?? []
     const totals = items.length > 0 ? computeTotals(items) : Number(existing.total.toString())
     const amountPaid = Number(existing.amountPaid.toString())
@@ -275,6 +304,7 @@ invoicesRouter.patch(
           ? {
               deleteMany: {},
               create: payload.items.map((item, index) => ({
+                organizationId: context.organization!.id,
                 description: item.description,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,

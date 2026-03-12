@@ -245,8 +245,11 @@ export const handleStripeWebhook = async (request: Request, response: Response) 
         },
       })
 
-      const invoice = await db.invoice.findUnique({
-        where: { id: session.metadata.invoiceId },
+      const invoice = await db.invoice.findFirst({
+        where: {
+          id: session.metadata.invoiceId,
+          organizationId,
+        },
         include: { client: true },
       })
 

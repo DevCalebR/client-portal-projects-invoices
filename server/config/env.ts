@@ -4,8 +4,14 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).optional(),
   PORT: z.coerce.number().int().positive().optional(),
   APP_URL: z.string().url().optional(),
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   DATABASE_URL: z.string().min(1).optional(),
+  DIRECT_DATABASE_URL: z.string().min(1).optional(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1).optional(),
   CLERK_SECRET_KEY: z.string().min(1).optional(),
   CLERK_SIGN_IN_URL: z.string().optional(),
   CLERK_SIGN_UP_URL: z.string().optional(),
@@ -36,16 +42,24 @@ const env = parsed.success ? parsed.data : {}
 export const serverEnv = {
   nodeEnv: env.NODE_ENV ?? 'development',
   port: env.PORT ?? 8787,
-  appUrl: env.APP_URL ?? env.VITE_APP_URL ?? 'http://localhost:5173',
+  appUrl: env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? env.VITE_APP_URL ?? 'http://localhost:5173',
   databaseUrl: env.DATABASE_URL ?? '',
-  clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY ?? env.VITE_CLERK_PUBLISHABLE_KEY ?? '',
+  directDatabaseUrl: env.DIRECT_DATABASE_URL ?? '',
+  supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+  supabaseAnonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  clerkPublishableKey:
+    env.CLERK_PUBLISHABLE_KEY ?? env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? env.VITE_CLERK_PUBLISHABLE_KEY ?? '',
+  nextPublicClerkPublishableKey:
+    env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? env.VITE_CLERK_PUBLISHABLE_KEY ?? env.CLERK_PUBLISHABLE_KEY ?? '',
   clerkSecretKey: env.CLERK_SECRET_KEY ?? '',
   clerkSignInUrl: env.CLERK_SIGN_IN_URL ?? '/sign-in',
   clerkSignUpUrl: env.CLERK_SIGN_UP_URL ?? '/sign-up',
   clerkAfterSignInUrl: env.CLERK_AFTER_SIGN_IN_URL ?? '/dashboard',
   clerkAfterSignUpUrl: env.CLERK_AFTER_SIGN_UP_URL ?? '/onboarding',
   clerkInvitationRedirectUrl:
-    env.CLERK_INVITATION_REDIRECT_URL ?? `${env.APP_URL ?? env.VITE_APP_URL ?? 'http://localhost:5173'}/sign-in`,
+    env.CLERK_INVITATION_REDIRECT_URL ??
+    `${env.APP_URL ?? env.NEXT_PUBLIC_APP_URL ?? env.VITE_APP_URL ?? 'http://localhost:5173'}/sign-in`,
   stripeSecretKey: env.STRIPE_SECRET_KEY ?? '',
   stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? '',
   stripePriceIds: {
@@ -59,6 +73,11 @@ export const serverEnv = {
 }
 
 export const hasServerIntegrationKey = (
-  key: 'stripeSecretKey' | 'stripeWebhookSecret' | 'resendApiKey' | 'clerkSecretKey' | 'databaseUrl',
+  key:
+    | 'stripeSecretKey'
+    | 'stripeWebhookSecret'
+    | 'resendApiKey'
+    | 'clerkSecretKey'
+    | 'databaseUrl'
+    | 'directDatabaseUrl',
 ) => Boolean(serverEnv[key])
-

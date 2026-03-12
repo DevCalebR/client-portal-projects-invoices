@@ -1,22 +1,22 @@
 # Client Portal SaaS
 
-Client Portal is now a real multi-tenant SaaS foundation built on the existing React + Vite frontend. The app keeps the current portal UI, but data now flows through a backend API, Prisma/PostgreSQL persistence, Clerk authentication, Stripe billing, Resend email delivery, and Sentry monitoring.
+Client Portal is a multi-tenant SaaS client portal built with React, Vite, TypeScript, an Express API, Prisma, Clerk, Stripe, Resend, and Sentry. The database layer is now Supabase Postgres, with Prisma using Supabase connection strings and a checked-in Supabase RLS policy file for tenant-aware access control.
 
-## Architecture overview
+## Architecture summary
 
-- Frontend: React 19 + Vite + TypeScript SPA with route-level code splitting.
-- API: Express application under [`server/`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/server) mounted locally via `tsx` and deployed on Vercel through [`api/index.ts`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/api/index.ts).
-- Database: PostgreSQL with Prisma schema/migrations under [`prisma/`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/prisma).
-- Authentication: Clerk user auth + Clerk organizations, synced into internal `User`, `Organization`, and `OrganizationMember` tables.
-- Billing: Stripe Checkout for subscriptions and invoice payments, plus Stripe customer portal and webhook handling.
-- Email: Resend transactional email service for invoices, payments, project updates, and team invitations.
-- Monitoring: Sentry for frontend runtime errors and backend API exceptions.
+- Frontend: React 19 + Vite + TypeScript
+- Backend: Express under [`server/`](/Users/caleb/Client Portal — Projects & Invoices /server)
+- Database: Supabase Postgres + Prisma under [`prisma/`](/Users/caleb/Client Portal — Projects & Invoices /prisma)
+- Auth: Clerk users + Clerk organizations
+- Billing: Stripe subscriptions and invoice checkout
+- Email: Resend
+- Monitoring: Sentry
+- Deployment: Vercel
 
-## Multi-tenant model
+## Multi-tenant data model
 
-Every core record is organization-scoped. The database enforces tenant boundaries through `organizationId` relations across:
+Organization isolation is enforced primarily through `organizationId` columns on tenant-scoped records:
 
-- `Organization`
 - `OrganizationMember`
 - `Client`
 - `Project`
@@ -26,114 +26,207 @@ Every core record is organization-scoped. The database enforces tenant boundarie
 - `ActivityEvent`
 - `Notification`
 
-Supported roles:
+`User` intentionally does not have a single `organizationId`, because a Clerk user can belong to multiple organizations. Tenant scoping for users is enforced through `OrganizationMember`.
 
-- `ADMIN`: full workspace access, billing, invites, destructive actions
-- `MANAGER`: internal operational access without subscription admin privileges
-- `CLIENT`: scoped access to their own client profile, projects, invoices, and invoice payments
+Current roles:
 
-## API surface
+- `ADMIN`
+- `MANAGER`
+- `CLIENT`
 
-Auth
+## Prisma schema and Supabase datasource
 
-- `GET /api/auth/session`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `POST /api/organizations/invitations`
+Prisma now uses the standard Supabase split:
 
-Projects
-
-- `GET /api/projects`
-- `POST /api/projects`
-- `GET /api/projects/:id`
-- `PATCH /api/projects/:id`
-- `DELETE /api/projects/:id`
-
-Invoices
-
-- `GET /api/invoices`
-- `POST /api/invoices`
-- `GET /api/invoices/:id`
-- `PATCH /api/invoices/:id`
-- `DELETE /api/invoices/:id`
-
-Clients
-
-- `GET /api/clients`
-- `POST /api/clients`
-- `PATCH /api/clients/:id`
-
-Payments
-
-- `POST /api/payments/create-checkout`
-- `POST /api/payments/customer-portal`
-- `POST /api/payments/webhook`
-
-Notifications and activity
-
-- `GET /api/notifications`
-- `PATCH /api/notifications/:id/read`
-- `GET /api/activity`
-
-All API routes enforce authentication. Organization scoping and role checks are enforced in the server layer, not just in the UI.
-
-## Project structure
-
-```text
-src/                 React frontend
-server/              Express API, auth, billing, email, monitoring
-api/index.ts         Vercel serverless entrypoint
-prisma/              Prisma schema, migration, seed script
-vercel.json          SPA + API rewrite rules for Vercel
-vite.config.ts       Frontend build and local API proxy configuration
+```prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
 ```
 
-## Local development
+- `DATABASE_URL`: pooled runtime connection string
+- `DIRECT_DATABASE_URL`: direct connection for migrations and Prisma CLI commands
 
-### Prerequisites
+This lives in [`prisma/schema.prisma`](/Users/caleb/Client Portal — Projects & Invoices /prisma/schema.prisma).
 
-- Node.js 20+
-- PostgreSQL 15+
-- A Clerk application with organizations enabled
-- A Stripe account with three recurring prices
-- A Resend account and verified sender
-- A Sentry project for browser and server DSNs
+## Supabase setup
 
-### Setup
+### 1. Create the Supabase project
 
-1. Install dependencies.
+1. Go to [Supabase](https://supabase.com/dashboard/projects).
+2. Click `New project`.
+3. Choose the organization, project name, region, and a strong database password.
+4. Wait for the database to provision.
+
+### 2. Get the database connection strings
+
+1. Open the project in the Supabase dashboard.
+2. Click `Connect` in the top bar.
+3. Open the database connection details.
+4. Copy:
+   - the `Transaction pooler` connection string for `DATABASE_URL`
+   - the `Direct connection` string for `DIRECT_DATABASE_URL`
+
+Recommended mapping:
+
+- `DATABASE_URL` = transaction pooler string on port `6543` with `?pgbouncer=true&connection_limit=1`
+- `DIRECT_DATABASE_URL` = direct Postgres string on port `5432`
+
+### 3. Get the Supabase project URL and keys
+
+1. In Supabase, open `Project Settings`.
+2. Open `Data API`.
+3. Copy:
+   - `Project URL` -> `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon` or `publishable` key -> `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` key -> `SUPABASE_SERVICE_ROLE_KEY`
+
+The current app does not use the Supabase JS client in production code, but these variables are documented and exposed for future Supabase client/admin integrations and for consistent deployment configuration.
+
+### 4. Configure Clerk as a Supabase Third-Party Auth provider
+
+1. In Supabase, open `Authentication`.
+2. Open `Sign In / Providers`.
+3. Open `Third-Party Auth`.
+4. Add `Clerk`.
+5. Follow the Supabase/Clerk provider prompts to trust Clerk-issued JWTs for your project.
+
+This is what allows Supabase RLS policies to evaluate Clerk claims from `auth.jwt()`.
+
+## Clerk setup
+
+### Required Clerk configuration
+
+1. Create or open your Clerk application in the [Clerk dashboard](https://dashboard.clerk.com/).
+2. Enable Organizations.
+3. Configure organization roles:
+   - `org:admin`
+   - `org:manager`
+   - `org:client`
+4. Copy:
+   - `Secret key` -> `CLERK_SECRET_KEY`
+   - `Publishable key` -> `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+
+Recommended frontend auth routes:
+
+- sign in: `/sign-in`
+- sign up: `/sign-up`
+- post sign-up onboarding: `/onboarding`
+
+## Environment variables
+
+The full list is in [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example).
+
+Required for Supabase/Clerk setup:
+
+- `DATABASE_URL`
+- `DIRECT_DATABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_APP_URL`
+
+Still required by the rest of the app:
+
+- `APP_URL`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PRICE_STARTER`
+- `STRIPE_PRICE_PROFESSIONAL`
+- `STRIPE_PRICE_AGENCY`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `SENTRY_DSN`
+- `VITE_SENTRY_DSN`
+- `VITE_APP_NAME`
+- `VITE_APP_SUBTITLE`
+- `VITE_API_BASE_URL`
+- `VITE_SUPPORT_EMAIL`
+
+## Supabase RLS security model
+
+The checked-in policy file is:
+
+- [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql)
+
+It enables RLS on tenant-sensitive tables and uses Clerk JWT claims to scope access. The helpers accept both Clerk claim formats:
+
+- `org_id` / `org_role`
+- `o.id` / `o.rol`
+
+Policy coverage includes:
+
+- `Organization`
+- `User`
+- `OrganizationMember`
+- `Client`
+- `Project`
+- `Invoice`
+- `InvoiceItem`
+- `Payment`
+- `ActivityEvent`
+- `Notification`
+
+Important limitation:
+
+- Supabase RLS protects Supabase-authenticated access paths.
+- This application’s runtime data path is still Express + Prisma over Postgres.
+- Because Prisma uses direct database connections instead of Supabase’s PostgREST layer, backend organization filtering remains mandatory.
+- The backend already enforces this with Clerk-backed request context and explicit `organizationId` filtering in API queries.
+
+## Migrations and database commands
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Copy the env template and fill in the required values.
+Copy the env file:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Create the PostgreSQL database referenced by `DATABASE_URL`.
-
-4. Apply the initial migration.
+Generate Prisma client:
 
 ```bash
-npm run db:deploy
+npm run db:generate
 ```
 
-For local iterative development you can also use:
+Run local development migrations:
 
 ```bash
 npm run db:migrate
 ```
 
-5. Seed development data.
+Run production/deployment migrations:
+
+```bash
+npm run db:deploy
+```
+
+Seed development data:
 
 ```bash
 npm run db:seed
 ```
 
-6. Start the full stack locally.
+Apply the Supabase RLS SQL:
+
+```bash
+psql "$DIRECT_DATABASE_URL" -f supabase/rls_policies.sql
+```
+
+You can also paste the file into the Supabase SQL Editor and run it there.
+
+## Local development
+
+Start the full stack:
 
 ```bash
 npm run dev
@@ -141,72 +234,44 @@ npm run dev
 
 This runs:
 
-- the Express API on `http://127.0.0.1:8787`
-- the Vite frontend on `http://localhost:5173`
+- Express API on `http://127.0.0.1:8787`
+- Vite frontend on `http://localhost:5173`
 
-The frontend proxies `/api` and `/health` to the local API automatically.
+Vite is configured to proxy `/api` and `/health` to the local API.
 
-## Clerk configuration
+## Backend tenant enforcement
 
-Configure Clerk with:
+Clerk middleware resolves the signed-in user and active Clerk organization, then the server syncs those into the internal database in [`server/lib/auth.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/lib/auth.ts).
 
-- User authentication enabled
-- Organizations enabled
-- Organization roles matching:
-  - `org:admin`
-  - `org:manager`
-  - `org:client`
-- Redirects pointing to:
-  - sign in: `/sign-in`
-  - sign up: `/sign-up`
-  - post sign-up onboarding: `/onboarding`
+Routes enforce tenant ownership by filtering on `context.organization.id`, for example in:
 
-The backend syncs Clerk users and organizations into the Prisma models on authenticated requests.
+- [`server/routes/clients.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/clients.ts)
+- [`server/routes/projects.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/projects.ts)
+- [`server/routes/invoices.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/invoices.ts)
+- [`server/routes/payments.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/payments.ts)
+- [`server/routes/notifications.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/notifications.ts)
+- [`server/routes/activity.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/activity.ts)
 
-## Stripe configuration
+This repository now also validates update flows so `clientId` and `projectId` cannot be switched across organizations during invoice/project edits.
 
-Create three recurring prices in Stripe:
+## Stripe, Resend, and Sentry
 
-- Starter
-- Professional
-- Agency
+Stripe:
 
-Expose the corresponding IDs through:
+- create Starter, Professional, and Agency recurring prices
+- set the three `STRIPE_PRICE_*` vars
+- create a webhook for `https://YOUR_DOMAIN/api/payments/webhook`
 
-- `STRIPE_PRICE_STARTER`
-- `STRIPE_PRICE_PROFESSIONAL`
-- `STRIPE_PRICE_AGENCY`
+Resend:
 
-### Local webhook forwarding
+- create an API key
+- verify a sender/domain
+- set `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
 
-Use the Stripe CLI during local development:
+Sentry:
 
-```bash
-stripe listen --forward-to http://127.0.0.1:8787/api/payments/webhook
-```
-
-Copy the resulting signing secret into `STRIPE_WEBHOOK_SECRET`.
-
-## Email workflows
-
-Resend is used for:
-
-- new invoice notifications
-- invoice paid confirmations
-- project update notifications
-- team invitation emails
-- plan change notifications
-
-Set `RESEND_API_KEY` and `RESEND_FROM_EMAIL` with a verified sender identity.
-
-## Monitoring
-
-Set:
-
-- `SENTRY_DSN` for backend/API capture
-- `VITE_SENTRY_DSN` for browser/runtime capture
-
-Frontend Sentry initializes in [`src/main.tsx`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/src/main.tsx). Backend Sentry initializes in [`server/lib/sentry.ts`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/server/lib/sentry.ts).
+- create backend and frontend projects
+- set `SENTRY_DSN` and `VITE_SENTRY_DSN`
 
 ## Verification
 
@@ -218,46 +283,17 @@ npm run typecheck
 npm run build
 ```
 
-## Deployment on Vercel
-
-### What Vercel serves
-
-- Static frontend from `dist/`
-- Express API via `api/index.ts`
-- Rewrites defined in [`vercel.json`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/vercel.json)
-
-### Deployment steps
+## Vercel deployment
 
 1. Import the repository into Vercel.
-2. Set the build command to `npm run build` if Vercel does not infer it.
-3. Set the output directory to `dist`.
-4. Add every environment variable from [`.env.example`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/.env.example).
-5. Point Stripe webhooks at `https://YOUR_DOMAIN/api/payments/webhook`.
-6. Set `APP_URL` and `VITE_APP_URL` to the production domain.
-7. Run `npm run db:deploy` against the production database during deployment or through your release pipeline.
+2. Set all variables from [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example).
+3. Make sure `APP_URL` and `NEXT_PUBLIC_APP_URL` match the production domain.
+4. Run `npm run db:deploy` against the production Supabase database.
+5. Apply [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql) to the production database.
+6. Confirm Stripe’s webhook endpoint points at `/api/payments/webhook`.
 
-## Production setup guide
+## Reference files
 
-### Required manual configuration
-
-1. Provision PostgreSQL and set `DATABASE_URL`.
-2. Configure Clerk keys, organization roles, and redirects.
-3. Configure Stripe products, prices, and webhook endpoint.
-4. Configure Resend sender verification and API key.
-5. Configure Sentry DSNs.
-6. Add all environment variables in Vercel.
-
-### Optional development seed linkage
-
-The seed file accepts Clerk IDs through:
-
-- `DEV_SEED_ADMIN_CLERK_USER_ID`
-- `DEV_SEED_MANAGER_CLERK_USER_ID`
-- `DEV_SEED_CLIENT_CLERK_USER_ID`
-- `DEV_SEED_CLERK_ORG_ID`
-
-These are useful if you want the seed data to line up with real Clerk test entities.
-
-## Documentation
-
-- Legacy audit and upgrade notes: [docs/AUDIT_REPORT.md](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/docs/AUDIT_REPORT.md)
+- Prisma schema: [`prisma/schema.prisma`](/Users/caleb/Client Portal — Projects & Invoices /prisma/schema.prisma)
+- RLS policies: [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql)
+- Supabase-compatible env template: [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example)
