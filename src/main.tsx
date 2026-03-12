@@ -43,7 +43,7 @@ if (!appConfig.clerkPublishableKey) {
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
         afterSignOutUrl="/sign-in"
-        signInFallbackRedirectUrl="/dashboard"
+        signInFallbackRedirectUrl="/onboarding"
         signUpFallbackRedirectUrl="/onboarding"
       >
         <AppErrorBoundary>

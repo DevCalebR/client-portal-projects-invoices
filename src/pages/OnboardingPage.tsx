@@ -1,6 +1,8 @@
 import { CreateOrganization, OrganizationSwitcher } from '@clerk/react'
+import { useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { logAppEvent } from '../utils/logger'
 
 export const OnboardingPage = () => {
   const {
@@ -12,6 +14,24 @@ export const OnboardingPage = () => {
     organizationSyncError,
     refreshSession,
   } = useAuth()
+
+  useEffect(() => {
+    logAppEvent('auth.onboarding', {
+      clerkLoaded,
+      clerkOrgId,
+      sessionOrgId: organization?.clerkOrganizationId ?? null,
+      loading,
+      isOrganizationSyncing,
+      organizationSyncError,
+    })
+  }, [
+    clerkLoaded,
+    clerkOrgId,
+    organization?.clerkOrganizationId,
+    loading,
+    isOrganizationSyncing,
+    organizationSyncError,
+  ])
 
   if (!clerkLoaded || loading || isOrganizationSyncing) {
     return (

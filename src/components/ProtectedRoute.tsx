@@ -1,7 +1,8 @@
-import { Navigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
+import { type ReactNode, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { type OrganizationRole, isInternalRole } from '../types/entities'
+import { logAppEvent } from '../utils/logger'
 
 type ProtectedRouteProps = {
   children: ReactNode
@@ -14,15 +15,57 @@ export const ProtectedRoute = ({
   allowedRoles,
   requireOrganization = true,
 }: ProtectedRouteProps) => {
+  const location = useLocation()
   const {
     user,
     organization,
     membership,
     loading,
     clerkLoaded,
+    clerkOrgId,
     isSignedIn,
     isOrganizationSyncing,
   } = useAuth()
+
+  let routeState = 'ready'
+
+  if (!clerkLoaded || loading || isOrganizationSyncing) {
+    routeState = 'loading'
+  } else if (!isSignedIn || !user) {
+    routeState = 'redirect_sign_in'
+  } else if (requireOrganization && !organization) {
+    routeState = 'redirect_onboarding'
+  } else if (allowedRoles && membership && !allowedRoles.includes(membership.role)) {
+    routeState = isInternalRole(membership.role) ? 'redirect_dashboard' : 'redirect_invoices'
+  }
+
+  useEffect(() => {
+    logAppEvent('auth.protected_route', {
+      path: location.pathname,
+      routeState,
+      requireOrganization,
+      allowedRoles: allowedRoles ?? null,
+      clerkLoaded,
+      loading,
+      isSignedIn,
+      clerkOrgId,
+      sessionOrgId: organization?.clerkOrganizationId ?? null,
+      membershipRole: membership?.role ?? null,
+      isOrganizationSyncing,
+    })
+  }, [
+    location.pathname,
+    routeState,
+    requireOrganization,
+    allowedRoles,
+    clerkLoaded,
+    loading,
+    isSignedIn,
+    clerkOrgId,
+    organization?.clerkOrganizationId,
+    membership?.role,
+    isOrganizationSyncing,
+  ])
 
   if (!clerkLoaded || loading || isOrganizationSyncing) {
     return (

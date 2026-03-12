@@ -34,7 +34,7 @@ const Header = () => {
       <span className="pill">{membership?.role ?? 'USER'}</span>
       <OrganizationSwitcher
         hidePersonal
-        afterSelectOrganizationUrl="/dashboard"
+        afterSelectOrganizationUrl="/onboarding"
         afterCreateOrganizationUrl="/onboarding"
       />
       <UserButton />

@@ -33,22 +33,36 @@ authRouter.get(
       })
     }
 
-    const [members, invitations] = await Promise.all([
-      db.organizationMember.findMany({
-        where: {
-          organizationId: context.organization.id,
-        },
-        include: {
-          user: true,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-      }),
-      clerkClient.organizations.getOrganizationInvitationList({
-        organizationId: context.auth.orgId!,
-      }),
-    ])
+    const membersPromise = db.organizationMember.findMany({
+      where: {
+        organizationId: context.organization.id,
+      },
+      include: {
+        user: true,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    })
+
+    const invitationsPromise =
+      context.role === OrganizationRole.ADMIN
+        ? clerkClient.organizations
+            .getOrganizationInvitationList({
+              organizationId: context.auth.orgId!,
+            })
+            .catch((error) => {
+              console.warn('[auth.session] Unable to fetch organization invitations.', {
+                orgId: context.auth.orgId,
+                userId: context.auth.userId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              })
+
+              return { data: [] }
+            })
+        : Promise.resolve({ data: [] })
+
+    const [members, invitations] = await Promise.all([membersPromise, invitationsPromise])
 
     return response.json({
       user: serializeUser(context.user),

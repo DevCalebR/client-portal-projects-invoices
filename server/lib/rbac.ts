@@ -19,6 +19,9 @@ export const mapClerkRole = (role: string | null | undefined): OrganizationRole 
   }
 }
 
+export const hasMappedClerkRole = (role: string | null | undefined) =>
+  role === 'org:admin' || role === 'org:manager' || role === 'org:client'
+
 export const requireRole = (
   role: OrganizationRole,
   allowedRoles: OrganizationRole[],

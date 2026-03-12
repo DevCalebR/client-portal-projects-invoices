@@ -3,7 +3,7 @@ import { clerkClient, getAuth } from '@clerk/express'
 import type { Request } from 'express'
 import { db } from './db.js'
 import { AppError } from './http.js'
-import { mapClerkRole, requireRole } from './rbac.js'
+import { hasMappedClerkRole, mapClerkRole, requireRole } from './rbac.js'
 
 const buildFullName = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
   const name = `${firstName ?? ''} ${lastName ?? ''}`.trim()
@@ -77,7 +77,6 @@ export const syncRequestContext = async (request: Request, options?: { requireOr
   const clerkOrganization = await clerkClient.organizations.getOrganization({
     organizationId: auth.orgId,
   })
-  const role = mapClerkRole(auth.orgRole)
 
   const organization = await db.organization.upsert({
     where: { clerkOrganizationId: clerkOrganization.id },
@@ -94,6 +93,19 @@ export const syncRequestContext = async (request: Request, options?: { requireOr
       billingEmail: user.email,
     },
   })
+
+  const existingMember = await db.organizationMember.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: organization.id,
+        userId: user.id,
+      },
+    },
+  })
+
+  const role = hasMappedClerkRole(auth.orgRole)
+    ? mapClerkRole(auth.orgRole)
+    : existingMember?.role ?? (organization.ownerUserId === user.id ? OrganizationRole.ADMIN : OrganizationRole.CLIENT)
 
   const member = await db.organizationMember.upsert({
     where: {
