@@ -3,10 +3,52 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export const OnboardingPage = () => {
-  const { organization } = useAuth()
+  const {
+    organization,
+    clerkLoaded,
+    clerkOrgId,
+    loading,
+    isOrganizationSyncing,
+    organizationSyncError,
+    refreshSession,
+  } = useAuth()
+
+  if (!clerkLoaded || loading || isOrganizationSyncing) {
+    return (
+      <main className="login-shell">
+        <section className="card auth-card">
+          <p className="eyebrow">Workspace onboarding</p>
+          <h1>Finishing your workspace setup</h1>
+          <p className="auth-copy">
+            Your organization was selected. The workspace is syncing and you will be redirected automatically.
+          </p>
+        </section>
+      </main>
+    )
+  }
 
   if (organization) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  if (clerkOrgId && organizationSyncError) {
+    return (
+      <main className="login-shell">
+        <section className="card auth-card">
+          <p className="eyebrow">Workspace onboarding</p>
+          <h1>We could not load the selected workspace</h1>
+          <p className="auth-copy">
+            The organization is selected in Clerk, but the application session could not finish syncing it.
+          </p>
+          <div className="form-actions">
+            <button className="btn btn--primary" type="button" onClick={() => void refreshSession()}>
+              Retry workspace sync
+            </button>
+          </div>
+          <p className="muted">{organizationSyncError}</p>
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -21,8 +63,8 @@ export const OnboardingPage = () => {
           <div className="inline-actions">
             <OrganizationSwitcher
               hidePersonal
-              afterSelectOrganizationUrl="/dashboard"
-              afterCreateOrganizationUrl="/dashboard"
+              afterSelectOrganizationUrl="/onboarding"
+              afterCreateOrganizationUrl="/onboarding"
             />
           </div>
         </div>
@@ -30,7 +72,7 @@ export const OnboardingPage = () => {
           routing="path"
           path="/onboarding"
           skipInvitationScreen={false}
-          afterCreateOrganizationUrl="/dashboard"
+          afterCreateOrganizationUrl="/onboarding"
         />
       </section>
     </main>

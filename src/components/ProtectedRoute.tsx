@@ -14,9 +14,17 @@ export const ProtectedRoute = ({
   allowedRoles,
   requireOrganization = true,
 }: ProtectedRouteProps) => {
-  const { user, organization, membership, loading, isSignedIn } = useAuth()
+  const {
+    user,
+    organization,
+    membership,
+    loading,
+    clerkLoaded,
+    isSignedIn,
+    isOrganizationSyncing,
+  } = useAuth()
 
-  if (loading) {
+  if (!clerkLoaded || loading || isOrganizationSyncing) {
     return (
       <section className="card">
         <p className="loading-placeholder">Loading your workspace...</p>
