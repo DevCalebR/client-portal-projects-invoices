@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { clerkClient, getAuth } from '@clerk/express'
 import { serverEnv } from '../config/env.js'
 import { ensureRequestContext, ensureRole, syncRequestContext } from '../lib/auth.js'
-import { AppError, asyncHandler, getErrorResponse, parseBody } from '../lib/http.js'
+import { asyncHandler, parseBody } from '../lib/http.js'
 import { createNotifications, notificationTypeTitles } from '../lib/notifications.js'
 import { serializeClient, serializeMembership, serializeOrganization, serializeUser } from '../lib/serializers.js'
 import { sendTeamInvitationEmail } from '../lib/email.js'
@@ -204,7 +204,6 @@ authRouter.get(
         },
       })
     } catch (error) {
-      const errorResponse = getErrorResponse(error)
       const partialContext = request.platform
 
       if (partialContext?.user) {
@@ -227,11 +226,12 @@ authRouter.get(
         ...sessionPayload.meta,
         ready: false,
         source: 'partial',
-        error: errorResponse.payload.message,
-        errorCode: errorResponse.payload.error,
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: 'SESSION_INIT_FAILED',
         syncedAt: new Date().toISOString(),
       }
 
+      console.error('SESSION ERROR:', error)
       console.error('[auth.session]', {
         traceId,
         event: 'error',
@@ -247,11 +247,16 @@ authRouter.get(
             }
           : null,
         error: normalizeError(error),
-        statusCode: error instanceof AppError ? error.statusCode : errorResponse.statusCode,
         timestamp: new Date().toISOString(),
       })
 
-      return response.json(sessionPayload)
+      return response.status(500).json({
+        error: 'SESSION_INIT_FAILED',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : null,
+        traceId,
+        session: sessionPayload,
+      })
     }
   }),
 )

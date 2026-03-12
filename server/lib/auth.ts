@@ -59,7 +59,7 @@ export const syncRequestContext = async (
     requireOrganization: options?.requireOrganization ?? false,
   })
 
-  console.log('SESSION INIT', {
+  console.log('SESSION INIT START', {
     traceId,
     userId: auth.userId ?? null,
     orgId: auth.orgId ?? null,
