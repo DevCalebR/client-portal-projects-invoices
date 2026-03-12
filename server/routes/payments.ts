@@ -1,14 +1,14 @@
 import { BillingPlan, InvoiceStatus, NotificationType, OrganizationRole, PaymentStatus, PaymentType, SubscriptionStatus } from '@prisma/client'
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth'
-import { asyncHandler, parseBody, AppError } from '../lib/http'
-import { db } from '../lib/db'
-import { serverEnv } from '../config/env'
-import { getStripe } from '../lib/stripe'
-import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications'
-import { sendInvoicePaidEmail, sendPlanChangedEmail } from '../lib/email'
-import { serializePayment } from '../lib/serializers'
+import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth.js'
+import { asyncHandler, parseBody, AppError } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { serverEnv } from '../config/env.js'
+import { getStripe } from '../lib/stripe.js'
+import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications.js'
+import { sendInvoicePaidEmail, sendPlanChangedEmail } from '../lib/email.js'
+import { serializePayment } from '../lib/serializers.js'
 
 const checkoutSchema = z.discriminatedUnion('kind', [
   z.object({

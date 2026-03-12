@@ -1,5 +1,5 @@
 import { NotificationType, type Prisma } from '@prisma/client'
-import { db } from './db'
+import { db } from './db.js'
 
 export const createNotifications = async (
   notifications: Prisma.NotificationCreateManyInput[],
@@ -25,4 +25,3 @@ export const notificationTypeTitles: Record<NotificationType, string> = {
   TEAM_INVITE: 'Team invitation',
   SYSTEM: 'System update',
 }
-

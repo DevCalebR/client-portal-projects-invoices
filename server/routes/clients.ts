@@ -1,10 +1,10 @@
 import { OrganizationRole } from '@prisma/client'
 import { Router } from 'express'
 import { z } from 'zod'
-import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth'
-import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http'
-import { db } from '../lib/db'
-import { serializeClient } from '../lib/serializers'
+import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth.js'
+import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { serializeClient } from '../lib/serializers.js'
 
 const clientCreateSchema = z.object({
   name: z.string().trim().min(2),

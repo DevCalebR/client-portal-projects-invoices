@@ -1,5 +1,5 @@
 import { OrganizationRole } from '@prisma/client'
-import { AppError } from './http'
+import { AppError } from './http.js'
 
 export const INTERNAL_ROLES: OrganizationRole[] = [
   OrganizationRole.ADMIN,
@@ -32,4 +32,3 @@ export const requireRole = (
 export const isInternalRole = (role: OrganizationRole) => INTERNAL_ROLES.includes(role)
 
 export const isBillingRole = (role: OrganizationRole) => role === OrganizationRole.ADMIN
-

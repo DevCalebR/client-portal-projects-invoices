@@ -1,6 +1,6 @@
 import { NotificationType, type BillingPlan, type Client, type Invoice, type Organization, type Project, type User } from '@prisma/client'
-import { getResend } from './resend'
-import { serverEnv } from '../config/env'
+import { getResend } from './resend.js'
+import { serverEnv } from '../config/env.js'
 
 const sendEmail = async (to: string, subject: string, html: string) => {
   if (!serverEnv.resendApiKey) {

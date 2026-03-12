@@ -1,12 +1,12 @@
 import { ActivitySubjectType, NotificationType, OrganizationRole, ProjectStatus } from '@prisma/client'
 import { Router } from 'express'
 import { z } from 'zod'
-import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth'
-import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications'
-import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http'
-import { db } from '../lib/db'
-import { serializeActivity, serializeProject } from '../lib/serializers'
-import { sendProjectUpdatedEmail } from '../lib/email'
+import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth.js'
+import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications.js'
+import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { serializeActivity, serializeProject } from '../lib/serializers.js'
+import { sendProjectUpdatedEmail } from '../lib/email.js'
 
 const projectSchema = z.object({
   name: z.string().trim().min(2),

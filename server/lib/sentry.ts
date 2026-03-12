@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/node'
-import { serverEnv } from '../config/env'
+import { serverEnv } from '../config/env.js'
 
 let initialized = false
 
@@ -21,4 +21,3 @@ export const captureServerException = (error: unknown, context?: Record<string, 
     Sentry.captureException(error, { extra: context })
   }
 }
-

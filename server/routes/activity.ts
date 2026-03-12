@@ -1,9 +1,9 @@
 import { OrganizationRole } from '@prisma/client'
 import { Router } from 'express'
-import { ensureRequestContext, getRequestContext } from '../lib/auth'
-import { asyncHandler } from '../lib/http'
-import { db } from '../lib/db'
-import { serializeActivity } from '../lib/serializers'
+import { ensureRequestContext, getRequestContext } from '../lib/auth.js'
+import { asyncHandler } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { serializeActivity } from '../lib/serializers.js'
 
 export const activityRouter = Router()
 

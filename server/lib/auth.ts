@@ -1,9 +1,9 @@
 import { OrganizationRole } from '@prisma/client'
 import { clerkClient, getAuth } from '@clerk/express'
 import type { Request } from 'express'
-import { db } from './db'
-import { AppError } from './http'
-import { mapClerkRole, requireRole } from './rbac'
+import { db } from './db.js'
+import { AppError } from './http.js'
+import { mapClerkRole, requireRole } from './rbac.js'
 
 const buildFullName = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
   const name = `${firstName ?? ''} ${lastName ?? ''}`.trim()
@@ -175,4 +175,3 @@ export const ensureRole = (request: Request, allowedRoles: OrganizationRole[], m
   requireRole(context.role, allowedRoles, message)
   return context
 }
-

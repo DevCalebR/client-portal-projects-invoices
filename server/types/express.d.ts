@@ -1,4 +1,4 @@
-import type { RequestContext } from './app'
+import type { RequestContext } from './app.js'
 
 declare global {
   namespace Express {
@@ -9,4 +9,3 @@ declare global {
 }
 
 export {}
-

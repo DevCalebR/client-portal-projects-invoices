@@ -1,12 +1,12 @@
 import { ActivitySubjectType, InvoiceStatus, NotificationType, OrganizationRole } from '@prisma/client'
 import { Router } from 'express'
 import { z } from 'zod'
-import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth'
-import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http'
-import { db } from '../lib/db'
-import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications'
-import { serializeActivity, serializeInvoice, serializePayment } from '../lib/serializers'
-import { sendInvoiceCreatedEmail } from '../lib/email'
+import { ensureRequestContext, ensureRole, getRequestContext } from '../lib/auth.js'
+import { asyncHandler, getRouteParam, parseBody, AppError } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { createActivityEvent, createNotifications, notificationTypeTitles } from '../lib/notifications.js'
+import { serializeActivity, serializeInvoice, serializePayment } from '../lib/serializers.js'
+import { sendInvoiceCreatedEmail } from '../lib/email.js'
 
 const invoiceItemSchema = z.object({
   description: z.string().trim().min(1),

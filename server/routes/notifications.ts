@@ -1,8 +1,8 @@
 import { Router } from 'express'
-import { ensureRequestContext, getRequestContext } from '../lib/auth'
-import { asyncHandler, AppError, getRouteParam } from '../lib/http'
-import { db } from '../lib/db'
-import { serializeNotification } from '../lib/serializers'
+import { ensureRequestContext, getRequestContext } from '../lib/auth.js'
+import { asyncHandler, AppError, getRouteParam } from '../lib/http.js'
+import { db } from '../lib/db.js'
+import { serializeNotification } from '../lib/serializers.js'
 
 export const notificationsRouter = Router()
 

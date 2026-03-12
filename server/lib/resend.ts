@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
-import { serverEnv } from '../config/env'
-import { AppError } from './http'
+import { serverEnv } from '../config/env.js'
+import { AppError } from './http.js'
 
 let resendInstance: Resend | null = null
 
@@ -15,4 +15,3 @@ export const getResend = () => {
 
   return resendInstance
 }
-

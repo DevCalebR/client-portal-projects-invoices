@@ -1,6 +1,6 @@
 import Stripe from 'stripe'
-import { serverEnv } from '../config/env'
-import { AppError } from './http'
+import { serverEnv } from '../config/env.js'
+import { AppError } from './http.js'
 
 let stripeInstance: Stripe | null = null
 
