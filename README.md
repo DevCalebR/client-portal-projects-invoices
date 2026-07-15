@@ -5,8 +5,8 @@ Client Portal is a multi-tenant SaaS client portal built with React, Vite, TypeS
 ## Architecture summary
 
 - Frontend: React 19 + Vite + TypeScript
-- Backend: Express under [`server/`](/Users/caleb/Client Portal — Projects & Invoices /server)
-- Database: Supabase Postgres + Prisma under [`prisma/`](/Users/caleb/Client Portal — Projects & Invoices /prisma)
+- Backend: Express under [`server/`](server/)
+- Database: Supabase Postgres + Prisma under [`prisma/`](prisma/)
 - Auth: Clerk users + Clerk organizations
 - Billing: Stripe subscriptions and invoice checkout
 - Email: Resend
@@ -49,7 +49,7 @@ datasource db {
 - `DATABASE_URL`: pooled runtime connection string
 - `DIRECT_DATABASE_URL`: direct connection for migrations and Prisma CLI commands
 
-This lives in [`prisma/schema.prisma`](/Users/caleb/Client Portal — Projects & Invoices /prisma/schema.prisma).
+This lives in [`prisma/schema.prisma`](prisma/schema.prisma).
 
 ## Supabase setup
 
@@ -117,7 +117,7 @@ Recommended frontend auth routes:
 
 ## Environment variables
 
-The full list is in [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example).
+The full list is in [`.env.example`](.env.example).
 
 Required for Supabase/Clerk setup:
 
@@ -151,7 +151,7 @@ Still required by the rest of the app:
 
 The checked-in policy file is:
 
-- [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql)
+- [`supabase/rls_policies.sql`](supabase/rls_policies.sql)
 
 It enables RLS on tenant-sensitive tables and uses Clerk JWT claims to scope access. The helpers accept both Clerk claim formats:
 
@@ -241,16 +241,16 @@ Vite is configured to proxy `/api` and `/health` to the local API.
 
 ## Backend tenant enforcement
 
-Clerk middleware resolves the signed-in user and active Clerk organization, then the server syncs those into the internal database in [`server/lib/auth.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/lib/auth.ts).
+Clerk middleware resolves the signed-in user and active Clerk organization, then the server syncs those into the internal database in [`server/lib/auth.ts`](server/lib/auth.ts).
 
 Routes enforce tenant ownership by filtering on `context.organization.id`, for example in:
 
-- [`server/routes/clients.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/clients.ts)
-- [`server/routes/projects.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/projects.ts)
-- [`server/routes/invoices.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/invoices.ts)
-- [`server/routes/payments.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/payments.ts)
-- [`server/routes/notifications.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/notifications.ts)
-- [`server/routes/activity.ts`](/Users/caleb/Client Portal — Projects & Invoices /server/routes/activity.ts)
+- [`server/routes/clients.ts`](server/routes/clients.ts)
+- [`server/routes/projects.ts`](server/routes/projects.ts)
+- [`server/routes/invoices.ts`](server/routes/invoices.ts)
+- [`server/routes/payments.ts`](server/routes/payments.ts)
+- [`server/routes/notifications.ts`](server/routes/notifications.ts)
+- [`server/routes/activity.ts`](server/routes/activity.ts)
 
 This repository now also validates update flows so `clientId` and `projectId` cannot be switched across organizations during invoice/project edits.
 
@@ -286,14 +286,14 @@ npm run build
 ## Vercel deployment
 
 1. Import the repository into Vercel.
-2. Set all variables from [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example).
+2. Set all variables from [`.env.example`](.env.example).
 3. Make sure `APP_URL` and `NEXT_PUBLIC_APP_URL` match the production domain.
 4. Run `npm run db:deploy` against the production Supabase database.
-5. Apply [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql) to the production database.
+5. Apply [`supabase/rls_policies.sql`](supabase/rls_policies.sql) to the production database.
 6. Confirm Stripe’s webhook endpoint points at `/api/payments/webhook`.
 
 ## Reference files
 
-- Prisma schema: [`prisma/schema.prisma`](/Users/caleb/Client Portal — Projects & Invoices /prisma/schema.prisma)
-- RLS policies: [`supabase/rls_policies.sql`](/Users/caleb/Client Portal — Projects & Invoices /supabase/rls_policies.sql)
-- Supabase-compatible env template: [`.env.example`](/Users/caleb/Client Portal — Projects & Invoices /.env.example)
+- Prisma schema: [`prisma/schema.prisma`](prisma/schema.prisma)
+- RLS policies: [`supabase/rls_policies.sql`](supabase/rls_policies.sql)
+- Supabase-compatible env template: [`.env.example`](.env.example)
