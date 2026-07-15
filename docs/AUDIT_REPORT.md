@@ -16,8 +16,8 @@ That architecture was not suitable for a production SaaS product because authori
 ## Current architecture
 
 - React + Vite + TypeScript frontend preserved and converted to API-backed persistence
-- Express backend added under [`server/`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/server)
-- PostgreSQL + Prisma data layer added under [`prisma/schema.prisma`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/prisma/schema.prisma)
+- Express backend added under [`server/`](../server/)
+- PostgreSQL + Prisma data layer added under [`prisma/schema.prisma`](../prisma/schema.prisma)
 - Clerk authentication and organization sync added for users, orgs, memberships, and invites
 - Stripe subscription checkout, invoice checkout, billing portal, and webhook handling added
 - Resend transactional email workflows added
@@ -28,7 +28,7 @@ That architecture was not suitable for a production SaaS product because authori
 
 ### Data and tenant isolation
 
-- Replaced localStorage persistence with server API calls in [`src/context/DataContext.tsx`](/Users/caleb/Client%20Portal%20%E2%80%94%20Projects%20%26%20Invoices%20/src/context/DataContext.tsx)
+- Replaced localStorage persistence with server API calls in [`src/context/DataContext.tsx`](../src/context/DataContext.tsx)
 - Added organization-scoped Prisma models for users, clients, projects, invoices, payments, activity, and notifications
 - Added server-side role enforcement for admin, manager, and client access patterns
 
